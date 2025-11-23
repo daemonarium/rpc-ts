@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowSyntheticDefaultImports": true,
+
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM"],
+
+    /* Linting */
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "outDir": "dist",
+    "checkJs": false,
+    "esModuleInterop": true,    // Enable interop for ES modules
+    "resolveJsonModule": true,  // Allow importing JSON files
+    "skipLibCheck": true,
+    "noImplicitAny": false
+  },
+  "files": ["src/index.ts"],
+  "include": [
+    "src/**/*.ts", "src/**/*.js"
+  ],
+  "exclude": ["node_modules/@types", "node_modules/**/*.d.ts", "**/*.test.js"]
+}
+

@@ -1,0 +1,16 @@
+{
+  "name": "@wa-os/ts-rpc",
+  "version": "0.1.0",
+  "description": "rpc for communimaction with webassembly code",
+  "main": "dist/index.js",
+  "author": "Michał Łaszczewski",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

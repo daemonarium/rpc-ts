@@ -1,0 +1,52 @@
+import type { Reader } from './reader.js'
+import type { Writer } from './writer.js'
+
+export interface TypedValue {
+  _type: string
+  [key: string]: unknown
+}
+
+export type Serializer<T = unknown> = (writer: Writer, value: T) => void
+export type Deserializer<T = unknown> = (reader: Reader) => T
+
+export interface Codec<T = unknown> {
+  name: string
+  serialize: Serializer<T>
+  deserialize: Deserializer<T>
+}
+
+export class CodecRegistry {
+  private codecs: Codec[] = []
+  private indexByName = new Map<string, number>()
+
+  register<T>(codec: Codec<T>): number {
+    if (this.indexByName.has(codec.name)) {
+      throw new Error(`Codec ${codec.name} already registered`)
+    }
+    const index = this.codecs.length
+    this.codecs.push(codec)
+    this.indexByName.set(codec.name, index)
+    return index
+  }
+
+  getIndexOrThrow(name: string): number {
+    const index = this.indexByName.get(name)
+    if (index === undefined) {
+      throw new Error(`Codec ${name} not registered`)
+    }
+    return index
+  }
+
+  getByIndex(index: number): Codec {
+    const codec = this.codecs[index]
+    if (!codec) {
+      throw new Error(`Codec at index ${index} not registered`)
+    }
+    return codec
+  }
+
+  has(name: string): boolean {
+    return this.indexByName.has(name)
+  }
+}
+
