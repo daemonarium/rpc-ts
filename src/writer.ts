@@ -87,21 +87,23 @@ export class Writer {
   }
 
   writePointer(value: unknown, writeLater: WriteLater): void {
+    if (value === null) {
+      this.writeSVarInt(0n)
+      return
+    }
     const existingIndex = this.writtenPointers.indexOf(value)
     if (existingIndex !== -1) {
       const delta = existingIndex - this.writtenPointers.length
       this.writeSVarInt(BigInt(delta))
       return
-    }
+    }    
     const pendingIndex = this.pendingPointers.findIndex(entry => entry.value === value)
-    if (pendingIndex !== -1) {
-      const index = this.writtenPointers.length + pendingIndex
-      const delta = index - this.writtenPointers.length
+    if (pendingIndex !== -1) {      
+      const delta = pendingIndex + 1
       this.writeSVarInt(BigInt(delta))
       return
-    }
-    const index = this.writtenPointers.length + this.pendingPointers.length
-    const delta = index - this.writtenPointers.length
+    }    
+    const delta = this.pendingPointers.length + 1
     this.writeSVarInt(BigInt(delta))
     this.pendingPointers.push({ value, writeLater })
   }

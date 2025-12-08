@@ -1,4 +1,5 @@
 import { CodecRegistry } from './codec.js'
+import { TypeKind } from './typeDescription.js'
 
 type AssignAfterRead = (value: unknown) => void
 type ReadLater = () => unknown
@@ -88,6 +89,10 @@ export class Reader {
 
   readPointer<T>(assign: (value: T) => void, readLater: () => T): void {
     const delta = Number(this.readSVarInt())
+    if (delta === 0) {
+      assign(null)
+      return
+    }
     if (delta < 0) {
       const index = this.readPointers.length + delta
       if (index < 0 || index >= this.readPointers.length) {
@@ -96,11 +101,12 @@ export class Reader {
       assign(this.readPointers[index] as T)
       return
     }
-    if (delta < this.pendingPointers.length) {
-      this.pendingPointers[delta].assignments.push(value => assign(value as T))
+    const offset = delta - 1; // decrement delta, because 0 is null
+    if (offset < this.pendingPointers.length) {
+      this.pendingPointers[offset].assignments.push(value => assign(value as T))
       return
     }
-    if (delta > this.pendingPointers.length) {
+    if (offset > this.pendingPointers.length) {
       throw new Error('Pointer delta too large, input is corrupted')
     }
     this.pendingPointers.push({
@@ -111,13 +117,14 @@ export class Reader {
 
   readRest(): void {
     while (this.pendingPointers.length > 0) {
-      const entry = this.pendingPointers.shift()
+      const entry = this.pendingPointers[0]
       if (!entry) continue
       const value = entry.readLater()
+      this.pendingPointers.shift()
       this.readPointers.push(value)
       for (const assign of entry.assignments) {
         assign(value)
-      }
+      }      
     }
   }
 

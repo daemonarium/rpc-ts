@@ -5,8 +5,8 @@ export {
   TypeDescription,
   TypeRegistry,
   TypeKind,
-  registerTypeDescriptionCodec
+  registerTypeDescriptionCodec,
+  typeRegistrySerializationRegistry
 } from './typeDescription.js'
-export { serializeTypedJson, deserializeTypedJson } from './valueSerialization.js'
+export { serializeTypedJson, deserializeTypedJson, registerDynamicCodecs } from './valueSerialization.js'
 export { registerRuntimeCodecs } from './runtimeCodecs.js'
-

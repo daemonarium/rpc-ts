@@ -13,8 +13,9 @@ export enum TypeKind {
   Enum = 7,
   Array = 8,
   Object = 9,
-  Pointer = 10,
-  Map = 11,
+  DynamicObject = 10,
+  Pointer = 11,
+  Map = 12,
   Function = 16,
   Method = 17
 }
@@ -27,6 +28,16 @@ export interface TypeMember {
 export interface EnumMember {
   name: string
   value: bigint
+}
+
+export interface TypeDescriptionParameters {
+  name: string
+  kind: TypeKind
+  members?: TypeMember[]
+  enumMembers?: EnumMember[]
+  bases?: TypeDescription[]
+  item?: TypeDescription
+  key?: TypeDescription
 }
 
 export class TypeDescription {
@@ -135,6 +146,19 @@ export class TypeDescription {
       return this.computeHash()
     }
     return this.hash
+  }
+
+  static create(
+    { name, kind, members = [], enumMembers = [], bases = [], item = undefined, key = undefined }: TypeDescriptionParameters): TypeDescription {
+    const type = new TypeDescription()
+    type.name = name
+    type.kind = kind
+    type.members = members
+    type.enumMembers = enumMembers
+    type.bases = bases
+    type.item = item
+    type.key = key
+    return type
   }
 }
 
@@ -322,6 +346,61 @@ export class TypeRegistry {
     reader.readRest()
     return registry
   }
+}
+
+export function typeRegistrySerializationRegistry(): TypeRegistry {
+  const registry = new TypeRegistry()
+  
+  const memberEntryType = TypeDescription.create({ 
+    name: 'pair<basic_string<char, char_traits<char>, allocator<char>>, shared_ptr<type_description>>', kind: TypeKind.Object, members: [
+      { name: 'first', type: registry.getTypeByName('string') },
+      { name: 'second', type: registry.getTypeByName('pointer') }
+    ] 
+  })
+  const membersType = TypeDescription.create({ 
+    name: 'vector<pair<basic_string<char, char_traits<char>, allocator<char>>, unsigned long>, allocator<pair<basic_string<char, char_traits<char>, allocator<char>>, unsigned long>>>',
+    kind: TypeKind.Array, item: memberEntryType
+  })
+
+  const enumMemberEntryType = TypeDescription.create({ 
+    name: 'pair<basic_string<char, char_traits<char>, allocator<char>>, unsigned long>', kind: TypeKind.Object, members: [
+      { name: 'first', type: registry.getTypeByName('string') },
+      { name: 'second', type: registry.getTypeByName('uint') }
+    ] 
+  })
+  const enumMembersType = TypeDescription.create({ 
+    name: 'vector<pair<basic_string<char, char_traits<char>, allocator<char>>, uint64_t>, allocator<pair<basic_string<char, char_traits<char>, allocator<char>>, uint64_t>>>',
+    kind: TypeKind.Array, item: enumMemberEntryType 
+  })
+  const typeDescriptionListType = TypeDescription.create({ 
+    name: 'vector<shared_ptr<type_description>, allocator<shared_ptr<type_description>>>', 
+    kind: TypeKind.Array, item: registry.getTypeByName('pointer')
+  })
+  const typeDescriptionType = TypeDescription.create({ 
+    name: 'type_description', kind: TypeKind.DynamicObject, members: [
+      { name: 'name', type: registry.getTypeByName('string') },
+      { name: 'kind', type: registry.getTypeByName('uint') },
+      { name: 'members', type: membersType },
+      { name: 'item', type: registry.getTypeByName('pointer') },
+      { name: 'key', type: registry.getTypeByName('pointer') },
+      { name: 'enumMembers', type: enumMembersType },
+      { name: 'bases', type: typeDescriptionListType }
+    ] 
+  })  
+  const typeRegistryType = TypeDescription.create({ 
+    name: 'type_registry', kind: TypeKind.Object, members: [
+      { name: '_types', type: typeDescriptionListType }
+    ]
+  })
+  registry.registerType(typeRegistryType)
+  registry.registerType(typeDescriptionListType)
+  registry.registerType(typeDescriptionType)
+  registry.registerType(membersType)
+  registry.registerType(memberEntryType)  
+  registry.registerType(enumMembersType)
+  registry.registerType(enumMemberEntryType)
+  return registry
+
 }
 
 export const registerTypeDescriptionCodec = (codecs: CodecRegistry): void => {

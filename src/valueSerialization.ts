@@ -2,6 +2,7 @@ import type { Reader } from './reader.js'
 import type { Writer } from './writer.js'
 import type { TypedValue } from './codec.js'
 import { TypeKind, type TypeDescription, type TypeMember, TypeRegistry } from './typeDescription.js'
+import { CodecRegistry } from './codec.js'
 
 export type JsonPrimitive = string | number | boolean | null
 export type JsonValue =
@@ -84,6 +85,9 @@ export const serializeValueByType = (writer: Writer, registry: TypeRegistry, typ
     case TypeKind.Object:
       serializeObject(writer, registry, type, value as Record<string, JsonValue>)
       break
+    case TypeKind.DynamicObject:
+      serializeObject(writer, registry, type, value as Record<string, JsonValue>)
+      break
     case TypeKind.Pointer: {
       const typed = value as TypedValue
       if (!typed || typeof typed._type !== 'string') {
@@ -163,6 +167,16 @@ export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, t
         return new Map(entries)
       }
     case TypeKind.Object:
+      reader.enterFrame()
+      {
+        const result: Record<string, JsonValue> = { _type: type.name }
+        for (const member of flattenMembers(type)) {
+          result[member.name] = deserializeValueByType(reader, registry, member.type)
+        }
+        reader.exitFrame()
+        return result as TypedValue
+      }
+    case TypeKind.DynamicObject:
       reader.enterFrame()
       {
         const result: Record<string, JsonValue> = { _type: type.name }
@@ -268,3 +282,14 @@ const extractEntries = (value: JsonValue): Array<[JsonValue, JsonValue]> => {
   return []
 }
 
+export function registerDynamicCodecs(codecs: CodecRegistry, registry: TypeRegistry): void {
+  for(const type of registry.getTypes()) {
+    if(type.kind === TypeKind.DynamicObject) {
+      codecs.register({
+        name: type.name,
+        serialize: (writer, value) => serializeValueByType(writer, registry, type, value as JsonValue),
+        deserialize: reader => deserializeValueByType(reader, registry, type)
+      })
+    }
+  }
+}
