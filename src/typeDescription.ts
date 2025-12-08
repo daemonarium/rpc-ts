@@ -351,14 +351,19 @@ export class TypeRegistry {
 export function typeRegistrySerializationRegistry(): TypeRegistry {
   const registry = new TypeRegistry()
   
+  const memberAnnotationsListType = TypeDescription.create({ 
+    name: 'vector<shared_ptr<member_annotation>, allocator<shared_ptr<member_annotation>>>', 
+    kind: TypeKind.Array, item: registry.getTypeByName('pointer')
+  })
   const memberEntryType = TypeDescription.create({ 
-    name: 'pair<basic_string<char, char_traits<char>, allocator<char>>, shared_ptr<type_description>>', kind: TypeKind.Object, members: [
-      { name: 'first', type: registry.getTypeByName('string') },
-      { name: 'second', type: registry.getTypeByName('pointer') }
+    name: 'member', kind: TypeKind.Object, members: [
+      { name: 'name', type: registry.getTypeByName('string') },
+      { name: 'type', type: registry.getTypeByName('pointer') },
+      { name: 'annotations', type: memberAnnotationsListType }
     ] 
   })
   const membersType = TypeDescription.create({ 
-    name: 'vector<pair<basic_string<char, char_traits<char>, allocator<char>>, unsigned long>, allocator<pair<basic_string<char, char_traits<char>, allocator<char>>, unsigned long>>>',
+    name: 'vector<member, allocator<member>>',
     kind: TypeKind.Array, item: memberEntryType
   })
 
@@ -376,6 +381,10 @@ export function typeRegistrySerializationRegistry(): TypeRegistry {
     name: 'vector<shared_ptr<type_description>, allocator<shared_ptr<type_description>>>', 
     kind: TypeKind.Array, item: registry.getTypeByName('pointer')
   })
+  const typeAnnotationsListType = TypeDescription.create({ 
+    name: 'vector<shared_ptr<type_annotation>, allocator<shared_ptr<type_annotation>>>', 
+    kind: TypeKind.Array, item: registry.getTypeByName('pointer')
+  })
   const typeDescriptionType = TypeDescription.create({ 
     name: 'type_description', kind: TypeKind.DynamicObject, members: [
       { name: 'name', type: registry.getTypeByName('string') },
@@ -384,7 +393,8 @@ export function typeRegistrySerializationRegistry(): TypeRegistry {
       { name: 'item', type: registry.getTypeByName('pointer') },
       { name: 'key', type: registry.getTypeByName('pointer') },
       { name: 'enumMembers', type: enumMembersType },
-      { name: 'bases', type: typeDescriptionListType }
+      { name: 'bases', type: typeDescriptionListType },
+      { name: 'annotations', type: typeAnnotationsListType }
     ] 
   })  
   const typeRegistryType = TypeDescription.create({ 
@@ -397,8 +407,20 @@ export function typeRegistrySerializationRegistry(): TypeRegistry {
   registry.registerType(typeDescriptionType)
   registry.registerType(membersType)
   registry.registerType(memberEntryType)  
+  registry.registerType(memberAnnotationsListType)
   registry.registerType(enumMembersType)
   registry.registerType(enumMemberEntryType)
+  registry.registerType(typeAnnotationsListType)
+
+  const memberAnnotationType = TypeDescription.create({ 
+    name: 'member_annotation', kind: TypeKind.DynamicObject, members: [] 
+  })
+  const readAnnotationType = TypeDescription.create({ 
+    name: 'read_annotation', kind: TypeKind.DynamicObject, members: [],
+    bases: [memberAnnotationType]
+  })
+  registry.registerType(readAnnotationType)
+  registry.registerType(memberAnnotationType)
   return registry
 
 }
