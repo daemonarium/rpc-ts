@@ -2,7 +2,7 @@ import { CodecRegistry } from './codec.js'
 import { TypeKind } from './typeDescription.js'
 
 type AssignAfterRead = (value: unknown) => void
-type ReadLater = () => unknown
+type ReadLater = (output: (value: unknown) => void) => void
 
 export class Reader {
   private readonly bytes: Uint8Array
@@ -37,11 +37,11 @@ export class Reader {
     throw new Error('Indexed frames are not supported in stream reader')
   }
 
-  readU64(): bigint {
+  readU64(): number | bigint {
     return this.readUVarInt()
   }
 
-  readI64(): bigint {
+  readI64(): number | bigint {
     return this.readSVarInt()
   }
 
@@ -81,13 +81,13 @@ export class Reader {
     return Number(length)
   }
 
-  readTyped<T>(): T {
+  readTyped<T>(output: (value: T) => void): void {
     const index = Number(this.readUVarInt())
     const codec = this.codecs.getByIndex(index)
-    return codec.deserialize(this) as T
+    codec.deserialize(this, output)
   }
 
-  readPointer<T>(assign: (value: T) => void, readLater: () => T): void {
+  readPointer<T>(assign: (value: T) => void, readLater: (output: (value: T) => void) => void): void {
     const delta = Number(this.readSVarInt())
     if (delta === 0) {
       assign(null)
@@ -119,12 +119,13 @@ export class Reader {
     while (this.pendingPointers.length > 0) {
       const entry = this.pendingPointers[0]
       if (!entry) continue
-      const value = entry.readLater()
-      this.pendingPointers.shift()
-      this.readPointers.push(value)
-      for (const assign of entry.assignments) {
-        assign(value)
-      }      
+      entry.readLater((value) => {
+        this.pendingPointers.shift()
+        this.readPointers.push(value)
+        for (const assign of entry.assignments) {
+          assign(value)
+        }
+      })      
     }
   }
 
@@ -136,70 +137,84 @@ export class Reader {
     return value
   }
 
-  private readUVarInt(): bigint {
+  private readUVarInt(): number | bigint {
     const first = this.readByte()
     if ((first & 0x80) === 0) {
-      return BigInt(first)
+      return first
     }
     if ((first & 0x40) === 0) {
       const second = this.readByte()
-      return (BigInt(first & 0x3F) << 8n) | BigInt(second)
+      const value = ((first & 0x3F) << 8) | second
+      return value
     }
     if ((first & 0x20) === 0) {
       const second = this.readByte()
       const third = this.readByte()
-      return (BigInt(first & 0x1F) << 16n)
-        | (BigInt(second) << 8n)
-        | BigInt(third)
+      const value = ((first & 0x1F) << 16) | (second << 8) | third
+      return value
     }
     if ((first & 0x10) === 0) {
       const b1 = this.readByte()
       const b2 = this.readByte()
       const b3 = this.readByte()
-      return (BigInt(first & 0x0F) << 24n)
-        | (BigInt(b1) << 16n)
-        | (BigInt(b2) << 8n)
-        | BigInt(b3)
+      const value = ((first & 0x0F) << 24) | (b1 << 16) | (b2 << 8) | b3
+      return value
     }
     if ((first & 0x08) === 0) {
       const b = this.readMultiple(4)
-      return (BigInt(first & 0x07) << 32n)
+      const valueBig = (BigInt(first & 0x07) << 32n)
         | (BigInt(b[0]) << 24n)
         | (BigInt(b[1]) << 16n)
         | (BigInt(b[2]) << 8n)
         | BigInt(b[3])
+      if (valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        return Number(valueBig)
+      }
+      return valueBig
     }
     if ((first & 0x04) === 0) {
       const b = this.readMultiple(5)
-      return (BigInt(first & 0x03) << 40n)
+      const valueBig = (BigInt(first & 0x03) << 40n)
         | (BigInt(b[0]) << 32n)
         | (BigInt(b[1]) << 24n)
         | (BigInt(b[2]) << 16n)
         | (BigInt(b[3]) << 8n)
         | BigInt(b[4])
+      if (valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        return Number(valueBig)
+      }
+      return valueBig
     }
     if ((first & 0x02) === 0) {
       const b = this.readMultiple(6)
-      return (BigInt(first & 0x01) << 48n)
+      const valueBig = (BigInt(first & 0x01) << 48n)
         | (BigInt(b[0]) << 40n)
         | (BigInt(b[1]) << 32n)
         | (BigInt(b[2]) << 24n)
         | (BigInt(b[3]) << 16n)
         | (BigInt(b[4]) << 8n)
         | BigInt(b[5])
+      if (valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        return Number(valueBig)
+      }
+      return valueBig
     }
     if ((first & 0x01) === 0) {
       const b = this.readMultiple(7)
-      return (BigInt(b[0]) << 48n)
+      const valueBig = (BigInt(b[0]) << 48n)
         | (BigInt(b[1]) << 40n)
         | (BigInt(b[2]) << 32n)
         | (BigInt(b[3]) << 24n)
         | (BigInt(b[4]) << 16n)
         | (BigInt(b[5]) << 8n)
         | BigInt(b[6])
+      if (valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        return Number(valueBig)
+      }
+      return valueBig
     }
     const b = this.readMultiple(8)
-    return (BigInt(b[0]) << 56n)
+    const valueBig = (BigInt(b[0]) << 56n)
       | (BigInt(b[1]) << 48n)
       | (BigInt(b[2]) << 40n)
       | (BigInt(b[3]) << 32n)
@@ -207,74 +222,89 @@ export class Reader {
       | (BigInt(b[5]) << 16n)
       | (BigInt(b[6]) << 8n)
       | BigInt(b[7])
+    if (valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
+      return Number(valueBig)
+    }
+    return valueBig
   }
 
-  private readSVarInt(): bigint {
+  private readSVarInt(): number | bigint {
     const first = this.readByte()
     const negative = (first & 0x80) === 0
     if ((first & 0x40) === 0) {
-      const raw = BigInt(first & 0x3F)
-      const mask = 0x3Fn
-      return negative ? -(((~raw) & mask)) : raw
+      const raw = first & 0x3F
+      const mask = 0x3F
+      const value = negative ? -(((~raw) & mask)) : raw
+      return value
     }
     if ((first & 0x20) === 0) {
       const second = this.readByte()
-      const raw = (BigInt(first & 0x1F) << 8n) | BigInt(second)
-      const mask = 0x3FFFn
-      return negative ? -(((~raw) & mask)) : raw
+      const raw = ((first & 0x1F) << 8) | second
+      const mask = 0x3FFF
+      const value = negative ? -(((~raw) & mask)) : raw
+      return value
     }
     if ((first & 0x10) === 0) {
       const second = this.readByte()
       const third = this.readByte()
-      const raw = (BigInt(first & 0x0F) << 16n)
-        | (BigInt(second) << 8n)
-        | BigInt(third)
-      const mask = 0x1FFFFn
-      return negative ? -(((~raw) & mask)) : raw
+      const raw = ((first & 0x0F) << 16) | (second << 8) | third
+      const mask = 0x1FFFF
+      const value = negative ? -(((~raw) & mask)) : raw
+      return value
     }
     if ((first & 0x08) === 0) {
       const b = this.readMultiple(3)
-      const raw = (BigInt(first & 0x07) << 24n)
-        | (BigInt(b[0]) << 16n)
-        | (BigInt(b[1]) << 8n)
-        | BigInt(b[2])
-      const mask = 0xFFFFFFn
-      return negative ? -(((~raw) & mask)) : raw
+      const raw = ((first & 0x07) << 24) | (b[0] << 16) | (b[1] << 8) | b[2]
+      const mask = 0xFFFFFF
+      const value = negative ? -(((~raw) & mask)) : raw
+      return value
     }
     if ((first & 0x04) === 0) {
       const b = this.readMultiple(4)
-      const raw = (BigInt(first & 0x03) << 32n)
+      const rawBig = (BigInt(first & 0x03) << 32n)
         | (BigInt(b[0]) << 24n)
         | (BigInt(b[1]) << 16n)
         | (BigInt(b[2]) << 8n)
         | BigInt(b[3])
       const mask = BigInt('0x7FFFFFFF')
-      return negative ? -(((~raw) & mask)) : raw
+      const valueBig = negative ? -(((~rawBig) & mask)) : rawBig
+      if (valueBig >= BigInt(Number.MIN_SAFE_INTEGER) && valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        return Number(valueBig)
+      }
+      return valueBig
     }
     if ((first & 0x02) === 0) {
       const b = this.readMultiple(5)
-      const raw = (BigInt(first & 0x01) << 40n)
+      const rawBig = (BigInt(first & 0x01) << 40n)
         | (BigInt(b[0]) << 32n)
         | (BigInt(b[1]) << 24n)
         | (BigInt(b[2]) << 16n)
         | (BigInt(b[3]) << 8n)
         | BigInt(b[4])
       const mask = BigInt('0x7FFFFFFFFF')
-      return negative ? -(((~raw) & mask)) : raw
+      const valueBig = negative ? -(((~rawBig) & mask)) : rawBig
+      if (valueBig >= BigInt(Number.MIN_SAFE_INTEGER) && valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        return Number(valueBig)
+      }
+      return valueBig
     }
     if ((first & 0x01) === 0) {
       const b = this.readMultiple(6)
-      const raw = (BigInt(b[0]) << 40n)
+      const rawBig = (BigInt(b[0]) << 40n)
         | (BigInt(b[1]) << 32n)
         | (BigInt(b[2]) << 24n)
         | (BigInt(b[3]) << 16n)
         | (BigInt(b[4]) << 8n)
         | BigInt(b[5])
       const mask = BigInt('0x7FFFFFFFFFFFFF')
-      return negative ? -(((~raw) & mask)) : raw
+      const valueBig = negative ? -(((~rawBig) & mask)) : rawBig
+      if (valueBig >= BigInt(Number.MIN_SAFE_INTEGER) && valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        return Number(valueBig)
+      }
+      return valueBig
     }
     const b = this.readMultiple(8)
-    const raw = (BigInt(b[0]) << 56n)
+    const rawBig = (BigInt(b[0]) << 56n)
       | (BigInt(b[1]) << 48n)
       | (BigInt(b[2]) << 40n)
       | (BigInt(b[3]) << 32n)
@@ -283,7 +313,11 @@ export class Reader {
       | (BigInt(b[6]) << 8n)
       | BigInt(b[7])
     const mask = BigInt('0x7FFFFFFFFFFFFFFF')
-    return negative ? -(((~raw) & mask)) : raw
+    const valueBig = negative ? -(((~rawBig) & mask)) : rawBig
+    if (valueBig >= BigInt(Number.MIN_SAFE_INTEGER) && valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
+      return Number(valueBig)
+    }
+    return valueBig
   }
 
   private readByte(): number {

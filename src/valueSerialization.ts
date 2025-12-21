@@ -27,7 +27,8 @@ export const deserializeTypedJson = (reader: Reader, registry: TypeRegistry, typ
   if (!type) {
     throw new Error(`Type ${typeName} not found in registry`)
   }
-  const result = deserializeValueByType(reader, registry, type) as TypedValue
+  let result
+  deserializeValueByType(reader, registry, type, (value) => result = value)
   reader.readRest()
   return result
 }
@@ -82,7 +83,7 @@ export const serializeValueByType = (writer: Writer, registry: TypeRegistry, typ
       writer.endFrame()
       writer.saveOffset()
       break
-    case TypeKind.Object:
+    case TypeKind.Object:      
       serializeObject(writer, registry, type, value as Record<string, JsonValue>)
       break
     case TypeKind.DynamicObject:
@@ -117,32 +118,32 @@ const serializeObject = (writer: Writer, registry: TypeRegistry, type: TypeDescr
   writer.saveOffset()
 }
 
-export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, type: TypeDescription): JsonValue => {
+export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, type: TypeDescription, output: (value: JsonValue) => void): void => {
   switch (type.kind) {
     case TypeKind.UnsignedInteger:
-      return reader.readU64()
+      return output(reader.readU64())
     case TypeKind.SignedInteger:
-      return reader.readI64()
+      return output(reader.readI64())
     case TypeKind.FloatingPoint:
-      return reader.readF64()
+      return output(reader.readF64())
     case TypeKind.Boolean:
-      return reader.readBool()
+      return output(reader.readBool())
     case TypeKind.String:
-      return reader.readString()
+      return output(reader.readString())
     case TypeKind.Binary:
-      return reader.readBinary()
+      return output(reader.readBinary())
     case TypeKind.Enum:
-      return resolveEnumName(type, reader.readU64())
+      return output(resolveEnumName(type, reader.readU64()))
     case TypeKind.Array:
       reader.enterFrame()
       {
         const length = reader.readLength()
         const result: JsonValue[] = new Array(length)
         for (let i = 0; i < length; ++i) {
-          result[i] = deserializeValueByType(reader, registry, ensureType(type.item))
+          deserializeValueByType(reader, registry, ensureType(type.item), (value) => result[i] = value)
         }
         reader.exitFrame()
-        return result
+        return output(result)
       }
     case TypeKind.Map:
       reader.enterFrame()
@@ -152,9 +153,9 @@ export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, t
         const keyType = ensureType(type.key)
         const itemType = ensureType(type.item)
         for (let i = 0; i < length; ++i) {
-          const key = deserializeValueByType(reader, registry, keyType)
-          const val = deserializeValueByType(reader, registry, itemType)
-          entries[i] = [key, val]
+          entries[i] = [undefined, undefined]
+          const key = deserializeValueByType(reader, registry, keyType, (value) => entries[i][0] = value)
+          const val = deserializeValueByType(reader, registry, itemType, (value) => entries[i][1] = value)          
         }
         reader.exitFrame()
         if (keyType.kind === TypeKind.String) {
@@ -162,40 +163,42 @@ export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, t
           for (const [k, v] of entries) {
             object[String(k)] = v
           }
-          return object
+          return
         }
-        return new Map(entries)
+        output(new Map(entries))
+        return
       }
     case TypeKind.Object:
       reader.enterFrame()
       {
         const result: Record<string, JsonValue> = { _type: type.name }
         for (const member of flattenMembers(type)) {
-          result[member.name] = deserializeValueByType(reader, registry, member.type)
+          result[member.name] = undefined
+          deserializeValueByType(reader, registry, member.type, (value) => result[member.name] = value)
         }
         reader.exitFrame()
-        return result as TypedValue
+        output(result as TypedValue)
+        return
       }
     case TypeKind.DynamicObject:
       reader.enterFrame()
       {
         const result: Record<string, JsonValue> = { _type: type.name }
         for (const member of flattenMembers(type)) {
-          result[member.name] = deserializeValueByType(reader, registry, member.type)
+          result[member.name] = undefined
+          deserializeValueByType(reader, registry, member.type, (value) => result[member.name] = value)
         }
         reader.exitFrame()
-        return result as TypedValue
+        output(result as TypedValue)
+        return
       }
     case TypeKind.Pointer: {
       const placeholder: Record<string, unknown> = {}
-      reader.readPointer<TypedValue>(
-        value => {
-          Object.keys(placeholder).forEach(key => delete placeholder[key])
-          Object.assign(placeholder, value)
-        },
-        () => reader.readTyped<TypedValue>()
+      reader.readPointer(
+        (value) => output(value as TypedValue),
+        (output) => reader.readTyped(output)
       )
-      return placeholder as TypedValue
+      return
     }
     default:
       throw new Error(`Unsupported deserialization for TypeKind ${type.kind}`)
@@ -227,6 +230,22 @@ const toBigInt = (value: JsonValue, allowNegative: boolean): bigint => {
   throw new Error(`Expected numeric value, got ${String(value)}`)
 }
 
+const toNumber = (value: JsonValue, allowNegative: boolean): number => {
+  if (typeof value === 'number') {
+    if (!allowNegative && value < 0) {
+      throw new Error('Value must be non-negative')
+    }
+    return value
+  }
+  if (typeof value === 'bigint') {
+    if (!allowNegative && value < 0n) {
+      throw new Error('Value must be non-negative')
+    }
+    return Number(value)
+  }
+  return Number(toBigInt(value, allowNegative))
+}
+
 const assertNumber = (value: JsonValue): number => {
   if (typeof value !== 'number') {
     throw new Error(`Expected number, got ${String(value)}`)
@@ -248,17 +267,17 @@ const toUint8Array = (value: JsonValue): Uint8Array => {
   throw new Error('Binary value must be Uint8Array, ArrayBuffer or number[]')
 }
 
-const resolveEnumValue = (type: TypeDescription, value: JsonValue): bigint => {
+const resolveEnumValue = (type: TypeDescription, value: JsonValue): number => {
   if (typeof value === 'string') {
     const match = type.enumMembers.find(member => member.name === value)
     if (!match) throw new Error(`Enum ${type.name} missing member ${value}`)
     return match.value
   }
-  return toBigInt(value, true)
+  return toNumber(value, true)
 }
 
-const resolveEnumName = (type: TypeDescription, raw: bigint): JsonValue => {
-  const match = type.enumMembers.find(member => member.value === raw)
+const resolveEnumName = (type: TypeDescription, raw: number | bigint): JsonValue => {
+  const match = type.enumMembers.find(member => member.value === Number(raw))
   return match ? match.name : raw
 }
 
@@ -288,7 +307,7 @@ export function registerDynamicCodecs(codecs: CodecRegistry, registry: TypeRegis
       codecs.register({
         name: type.name,
         serialize: (writer, value) => serializeValueByType(writer, registry, type, value as JsonValue),
-        deserialize: reader => deserializeValueByType(reader, registry, type)
+        deserialize: (reader, output) => deserializeValueByType(reader, registry, type, output)
       })
     }
   }

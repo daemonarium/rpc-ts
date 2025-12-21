@@ -133,7 +133,10 @@ export class Writer {
     return result
   }
 
-  private writeUVarInt(value: bigint): void {
+  private writeUVarInt(value: bigint | number): void {
+    if (typeof value === 'number') {
+      value = BigInt(value)
+    }
     if (value < 0n) {
       throw new Error('UVarInt cannot be negative')
     }

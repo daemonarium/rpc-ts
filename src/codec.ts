@@ -7,7 +7,7 @@ export interface TypedValue {
 }
 
 export type Serializer<T = unknown> = (writer: Writer, value: T) => void
-export type Deserializer<T = unknown> = (reader: Reader) => T
+export type Deserializer<T = unknown> = (reader: Reader, output: (value: T) => void) => void
 
 export interface Codec<T = unknown> {
   name: string
@@ -47,6 +47,10 @@ export class CodecRegistry {
 
   has(name: string): boolean {
     return this.indexByName.has(name)
+  }
+
+  replace<T>(codec: Codec<T>): void {
+    this.codecs[this.indexByName.get(codec.name)] = codec
   }
 }
 
