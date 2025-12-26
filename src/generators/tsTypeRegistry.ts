@@ -4,7 +4,13 @@ export interface TsRegistryGeneratorOptions {
   functionName?: string
 }
 
-function sanitizeVariableName(name: string): string {
+export interface TypeRegistryGenerationResult {
+  varNames: string[]
+  varNameMap: Map<TypeDescription, string>
+  registryCode: string
+}
+
+export function sanitizeVariableName(name: string): string {
   // Replace invalid characters with underscores
   return name
     .replace(/[^a-zA-Z0-9_]/g, '_')
@@ -13,7 +19,7 @@ function sanitizeVariableName(name: string): string {
     .replace(/^_|_$/g, '') // Remove leading/trailing underscores
 }
 
-function getTypeVariableName(type: TypeDescription, index: number, allTypes: TypeDescription[]): string {
+export function getTypeVariableName(type: TypeDescription, index: number, allTypes: TypeDescription[]): string {
   const baseName = sanitizeVariableName(type.name || `type_${index}`)
   
   // Check for duplicates and add index suffix if needed
@@ -39,8 +45,31 @@ function getTypeVariableName(type: TypeDescription, index: number, allTypes: Typ
   return varName
 }
 
-export function generateTsTypeRegistry(registry: TypeRegistry, options: TsRegistryGeneratorOptions = {}): string {
-  const fnName = options.functionName || 'createGeneratedTypeRegistry'
+export function renderKind(kind: TypeKind): string {
+  switch (kind) {
+    case TypeKind.Void: return 'TypeKind.Void'
+    case TypeKind.UnsignedInteger: return 'TypeKind.UnsignedInteger'
+    case TypeKind.SignedInteger: return 'TypeKind.SignedInteger'
+    case TypeKind.FloatingPoint: return 'TypeKind.FloatingPoint'
+    case TypeKind.Boolean: return 'TypeKind.Boolean'
+    case TypeKind.String: return 'TypeKind.String'
+    case TypeKind.Binary: return 'TypeKind.Binary'
+    case TypeKind.Enum: return 'TypeKind.Enum'
+    case TypeKind.Array: return 'TypeKind.Array'
+    case TypeKind.Object: return 'TypeKind.Object'
+    case TypeKind.DynamicObject: return 'TypeKind.DynamicObject'
+    case TypeKind.Pointer: return 'TypeKind.Pointer'
+    case TypeKind.Map: return 'TypeKind.Map'
+    case TypeKind.Function: return 'TypeKind.Function'
+    case TypeKind.Method: return 'TypeKind.Method'
+    default: return 'TypeKind.Void'
+  }
+}
+
+export function generateTypeRegistryCode(
+  registry: TypeRegistry,
+  fnName: string
+): TypeRegistryGenerationResult {
   const types = registry.getTypes()
 
   // Generate variable names for all types
@@ -48,11 +77,7 @@ export function generateTsTypeRegistry(registry: TypeRegistry, options: TsRegist
   const varNameMap = new Map<TypeDescription, string>()
   types.forEach((type, i) => varNameMap.set(type, varNames[i]))
 
-  // Create stable references for all types first (without members/item/key)
   const lines: string[] = []
-  lines.push('// Auto-generated TypeScript TypeRegistry builder')
-  lines.push("import { TypeRegistry, TypeDescription, TypeKind } from '@wa-os/ts-rpc'")
-  lines.push('')
   lines.push(`export function ${fnName}(): TypeRegistry {`)
   lines.push('  const registry = new TypeRegistry()')
   lines.push('')
@@ -145,29 +170,25 @@ export function generateTsTypeRegistry(registry: TypeRegistry, options: TsRegist
 
   lines.push('  return registry')
   lines.push('}')
-  lines.push('')
 
-  return lines.join('\n')
+  return {
+    varNames,
+    varNameMap,
+    registryCode: lines.join('\n')
+  }
 }
 
-function renderKind(kind: TypeKind): string {
-  switch (kind) {
-    case TypeKind.Void: return 'TypeKind.Void'
-    case TypeKind.UnsignedInteger: return 'TypeKind.UnsignedInteger'
-    case TypeKind.SignedInteger: return 'TypeKind.SignedInteger'
-    case TypeKind.FloatingPoint: return 'TypeKind.FloatingPoint'
-    case TypeKind.Boolean: return 'TypeKind.Boolean'
-    case TypeKind.String: return 'TypeKind.String'
-    case TypeKind.Binary: return 'TypeKind.Binary'
-    case TypeKind.Enum: return 'TypeKind.Enum'
-    case TypeKind.Array: return 'TypeKind.Array'
-    case TypeKind.Object: return 'TypeKind.Object'
-    case TypeKind.DynamicObject: return 'TypeKind.DynamicObject'
-    case TypeKind.Pointer: return 'TypeKind.Pointer'
-    case TypeKind.Map: return 'TypeKind.Map'
-    case TypeKind.Function: return 'TypeKind.Function'
-    case TypeKind.Method: return 'TypeKind.Method'
-    default: return 'TypeKind.Void'
-  }
+export function generateTsTypeRegistry(registry: TypeRegistry, options: TsRegistryGeneratorOptions = {}): string {
+  const fnName = options.functionName || 'createGeneratedTypeRegistry'
+  const result = generateTypeRegistryCode(registry, fnName)
+  
+  const lines: string[] = []
+  lines.push('// Auto-generated TypeScript TypeRegistry builder')
+  lines.push("import { TypeRegistry, TypeDescription, TypeKind } from '@wa-os/ts-rpc'")
+  lines.push('')
+  lines.push(result.registryCode)
+  lines.push('')
+  
+  return lines.join('\n')
 }
 

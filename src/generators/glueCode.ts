@@ -27,5 +27,12 @@ export const glueCodeGenerators: GlueCodeGenerator[] = [
       const { generateTsTypeRegistry } = await import('./tsTypeRegistry.js')
       return generateTsTypeRegistry(registry)
     }
+  },
+  {
+    name: 'TS Server',
+    generate: async (registry) => {
+      const { generateTsServer } = await import('./tsServer.js')
+      return generateTsServer(registry)
+    }
   }
 ]
