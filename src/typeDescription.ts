@@ -31,6 +31,13 @@ export interface EnumMember {
   value: number
 }
 
+export interface RegisteredMethod {
+  methodId: number
+  methodType: TypeDescription
+  ownerType: TypeDescription
+  memberName: string
+}
+
 export interface TypeDescriptionParameters {
   name: string
   kind: TypeKind
@@ -54,6 +61,14 @@ export class TypeDescription implements TypedValue {
   key?: TypeDescription
   annotations: TypedValue[] = []
   hash?: number
+  methodId?: number
+  
+  // Implementation fields (only used for Method/Function types and Object types with methods)
+  implementation?: (...args: any[]) => any | Promise<any>  // for static methods/functions
+  implementationInstance?: any  // object instance or prototype with methods (for dynamic methods)
+  fetchObjectImplementation?: (id: any) => any  // function to fetch object by ID (for dynamic methods)
+  singletonInstance?: () => any  // function to get singleton instance (for singleton methods, no ID needed)
+  
   [key: string]: unknown
 
   computeHash(): number {
@@ -132,6 +147,7 @@ const BUILTIN_TYPES: Array<{ name: string, kind: TypeKind }> = [
 export class TypeRegistry {
   private types: TypeDescription[] = []
   private readonly typesByName = new Map<string, TypeDescription>()
+  private methods: RegisteredMethod[] = []
 
   constructor(types: TypeDescription[] = undefined) {
     if(types) {
@@ -171,6 +187,50 @@ export class TypeRegistry {
 
   getTypes(): TypeDescription[] {
     return this.types
+  }
+
+  /**
+   * Assigns methodId to all methods and functions in the registry
+   * based on their order in the type registry (similar to glue code generation)
+   */
+  assignMethodIds(): void {
+    let methodId = 0
+    this.methods = []
+
+    // Find all object types with methods/functions
+    const objectTypes = this.types.filter(type => {
+      if (type.kind !== TypeKind.Object && type.kind !== TypeKind.DynamicObject) {
+        return false
+      }
+      return type.members?.some(member => 
+        member.type.kind === TypeKind.Method || member.type.kind === TypeKind.Function
+      ) || false
+    })
+
+    // Assign methodId to each method/function
+    for (const objectType of objectTypes) {
+      const methodMembers = objectType.members?.filter(member => 
+        member.type.kind === TypeKind.Method || member.type.kind === TypeKind.Function
+      ) || []
+
+      for (const methodMember of methodMembers) {
+        methodMember.type.methodId = methodId
+        this.methods.push({
+          methodId: methodId,
+          methodType: methodMember.type,
+          ownerType: objectType,
+          memberName: methodMember.name
+        })
+        methodId++
+      }
+    }
+  }
+
+  /**
+   * Returns list of all registered methods with their methodIds
+   */
+  getMethods(): RegisteredMethod[] {
+    return this.methods
   }
 
 }
