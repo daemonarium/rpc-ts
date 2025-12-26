@@ -20,5 +20,12 @@ export const glueCodeGenerators: GlueCodeGenerator[] = [
       const { generateCppServerCode } = await import('./cppServer.js')
       return generateCppServerCode(registry, options)
     }
+  },
+  {
+    name: 'TS Type Registry',
+    generate: async (registry) => {
+      const { generateTsTypeRegistry } = await import('./tsTypeRegistry.js')
+      return generateTsTypeRegistry(registry)
+    }
   }
 ]
