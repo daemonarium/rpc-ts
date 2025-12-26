@@ -4,7 +4,7 @@ import yargs from 'yargs'
 import { hideBin } from 'yargs/helpers'
 import { readFileSync } from 'fs'
 import { TypeRegistry, deserializeTypeRegistry, glueCodeGenerators } from './index.js'
-import type { GeneratorOptions } from './generators/cpp.js'
+import type { GeneratorOptions } from './generators/cppClient.js'
 
 async function loadWasmModule(filePath: string): Promise<TypeRegistry> {
   const wasmBuffer = readFileSync(filePath)
