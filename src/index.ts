@@ -1,5 +1,8 @@
 export { Reader } from './reader.js'
 export { Writer } from './writer.js'
+export { CircularBuffer } from './CircularBuffer.js'
+export { CircularBufferReader } from './CircularBufferReader.js'
+export { CircularBufferWriter } from './CircularBufferWriter.js'
 export { CodecRegistry, type TypedValue } from './codec.js'
 export {
   TypeDescription,
