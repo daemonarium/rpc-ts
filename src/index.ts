@@ -3,6 +3,7 @@ export { Writer } from './writer.js'
 export { CircularBuffer } from './CircularBuffer.js'
 export { CircularBufferReader } from './CircularBufferReader.js'
 export { CircularBufferWriter } from './CircularBufferWriter.js'
+export { ModuleSockets, Socket, SOCKET_FLAG_OPEN, SOCKET_FLAG_READABLE, SOCKET_FLAG_WRITABLE, SOCKET_FLAG_ERROR } from './ModuleSockets.js'
 export { CodecRegistry, type TypedValue } from './codec.js'
 export {
   TypeDescription,
