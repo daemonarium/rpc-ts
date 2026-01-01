@@ -198,6 +198,7 @@ export class Socket {
   writeSVarInt(value: number | bigint): number {
     return this.inputBuffer.writeSVarInt(value)
   }
+
 }
 
 /**

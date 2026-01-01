@@ -17,14 +17,14 @@ function getFunctionName(type: TypeDescription, varNameMap: Map<TypeDescription,
   return sanitizeVariableName(type.name || 'unknown') + '_impl'
 }
 
-function getReturnTypeString(type: TypeDescription): string {
+function getReturnTypeString(type: TypeDescription, varNameMap: Map<TypeDescription, string>): string {
   if (!type.item || type.item.kind === TypeKind.Void) {
     return 'Promise<void>'
   }
-  return `Promise<${getTypeString(type.item)}>`
+  return `Promise<${getTypeString(type.item, varNameMap)}>`
 }
 
-function getTypeString(type: TypeDescription): string {
+function getTypeString(type: TypeDescription, varNameMap: Map<TypeDescription, string>): string {
   switch (type.kind) {
     case TypeKind.Void:
       return 'void'
@@ -42,23 +42,33 @@ function getTypeString(type: TypeDescription): string {
       return 'Uint8Array'
     case TypeKind.Array:
       if (type.item) {
-        return `${getTypeString(type.item)}[]`
+        return `${getTypeString(type.item, varNameMap)}[]`
       }
       return 'any[]'
     case TypeKind.Object:
     case TypeKind.DynamicObject:
+      // Use the generated TypeScript type name (variable name from registry)
+      const objVarName = varNameMap.get(type)
+      if (objVarName) {
+        return objVarName
+      }
       return type.name || 'any'
     case TypeKind.Pointer:
       if (type.item) {
-        return `${getTypeString(type.item)} | null`
+        return `${getTypeString(type.item, varNameMap)} | null`
       }
       return 'any | null'
     case TypeKind.Map:
       if (type.key && type.item) {
-        return `Map<${getTypeString(type.key)}, ${getTypeString(type.item)}>`
+        return `Map<${getTypeString(type.key, varNameMap)}, ${getTypeString(type.item, varNameMap)}>`
       }
       return 'Map<any, any>'
     case TypeKind.Enum:
+      // Use the generated TypeScript type name (variable name from registry)
+      const enumVarName = varNameMap.get(type)
+      if (enumVarName) {
+        return enumVarName
+      }
       return type.name || 'number'
     default:
       return 'any'
@@ -91,6 +101,10 @@ export function generateTsServer(registry: TypeRegistry, options: TsServerGenera
   lines.push("import { TypeRegistry, TypeDescription, TypeKind } from '@wa-os/ts-rpc'")
   lines.push('')
   
+  // Generate TypeScript type definitions
+  lines.push(result.typesCode)
+  lines.push('')
+  
   // Generate registry function
   lines.push(result.registryCode)
   lines.push('')
@@ -99,12 +113,12 @@ export function generateTsServer(registry: TypeRegistry, options: TsServerGenera
   lines.push('// Empty method implementations')
   for (const type of [...functionTypes, ...methodTypes]) {
     const fnName = getFunctionName(type, varNameMap)
-    const returnType = getReturnTypeString(type)
+    const returnType = getReturnTypeString(type, varNameMap)
     const params = type.members || []
     
     lines.push(`async function ${fnName}(`)
     const paramStrings = params.map((p, i) => {
-      const paramType = getTypeString(p.type)
+      const paramType = getTypeString(p.type, varNameMap)
       return `  ${p.name}: ${paramType}`
     })
     if (paramStrings.length > 0) {
@@ -133,12 +147,13 @@ export function generateTsServer(registry: TypeRegistry, options: TsServerGenera
   }
   
   // Generate implementation function
-  lines.push(`export function ${implementationFnName}(registry: TypeRegistry): void {`)
+  lines.push(`export function ${implementationFnName}(result: ReturnType<typeof ${registryFnName}>): void {`)
+  lines.push('  const { registry, types } = result')
   for (const type of [...functionTypes, ...methodTypes]) {
     const varName = varNameMap.get(type)
     const fnName = getFunctionName(type, varNameMap)
     if (varName) {
-      lines.push(`  ${varName}.implementation = ${fnName}`)
+      lines.push(`  types['${varName}'].implementation = ${fnName}`)
     }
   }
   lines.push('}')
@@ -146,10 +161,10 @@ export function generateTsServer(registry: TypeRegistry, options: TsServerGenera
   
   // Generate setup function
   lines.push(`export function ${setupFnName}(): TypeRegistry {`)
-  lines.push(`  const registry = ${registryFnName}()`)
-  lines.push(`  ${implementationFnName}(registry)`)
-  lines.push('  registry.assignMethodIds()')
-  lines.push('  return registry')
+  lines.push(`  const result = ${registryFnName}()`)
+  lines.push(`  ${implementationFnName}(result)`)
+  lines.push('  result.registry.assignMethodIds()')
+  lines.push('  return result.registry')
   lines.push('}')
   lines.push('')
   

@@ -8,7 +8,20 @@ export interface TypeRegistryGenerationResult {
   varNames: string[]
   varNameMap: Map<TypeDescription, string>
   registryCode: string
+  typesCode: string
 }
+
+// TypeScript reserved keywords that cannot be used as variable names
+const TS_KEYWORDS = new Set([
+  'void', 'any', 'unknown', 'never', 'object', 'string', 'number', 'boolean', 'bigint', 'symbol',
+  'undefined', 'null', 'true', 'false',
+  'let', 'const', 'var', 'function', 'class', 'interface', 'type', 'enum', 'namespace',
+  'export', 'import', 'from', 'as', 'default', 'return', 'if', 'else', 'for', 'while', 'do',
+  'switch', 'case', 'break', 'continue', 'try', 'catch', 'finally', 'throw', 'new', 'this',
+  'super', 'extends', 'implements', 'static', 'public', 'private', 'protected', 'readonly',
+  'abstract', 'async', 'await', 'yield', 'of', 'in', 'instanceof', 'typeof', 'delete',
+  'get', 'set', 'constructor', 'declare', 'module', 'require'
+])
 
 export function sanitizeVariableName(name: string): string {
   // Replace invalid characters with underscores
@@ -22,27 +35,9 @@ export function sanitizeVariableName(name: string): string {
 export function getTypeVariableName(type: TypeDescription, index: number, allTypes: TypeDescription[]): string {
   const baseName = sanitizeVariableName(type.name || `type_${index}`)
   
-  // Check for duplicates and add index suffix if needed
-  let varName = baseName
-  let suffix = 0
-  for (let i = 0; i < index; i++) {
-    const otherType = allTypes[i]
-    const otherBaseName = sanitizeVariableName(otherType.name || `type_${i}`)
-    if (otherBaseName === baseName) {
-      suffix++
-    }
-  }
-  
-  if (suffix > 0) {
-    varName = `${baseName}_${suffix}`
-  }
-  
-  // Ensure it's a valid identifier
-  if (!varName || /^[0-9]/.test(varName)) {
-    varName = `type_${varName || index}`
-  }
-  
-  return varName
+  // Always use index suffix to avoid conflicts with keywords and ensure uniqueness
+  // Format: baseName_index (e.g., void_0, uint_1, direction_118)
+  return `${baseName}_${index}`
 }
 
 export function renderKind(kind: TypeKind): string {
@@ -66,6 +61,92 @@ export function renderKind(kind: TypeKind): string {
   }
 }
 
+function generateTypeScriptType(type: TypeDescription, varNameMap: Map<TypeDescription, string>, typeVarName: string): string {
+  switch (type.kind) {
+    case TypeKind.Enum:
+      if (type.enumMembers && type.enumMembers.length > 0) {
+        const enumValues = type.enumMembers
+          .map((m, idx) => {
+            let name: string
+            if (m.name && m.name.trim()) {
+              name = sanitizeVariableName(m.name)
+            } else {
+              name = `Value${m.value !== undefined ? m.value : idx}`
+            }
+            const value = m.value !== undefined ? m.value : idx
+            return `  ${name} = ${value}`
+          })
+          .join(',\n')
+        return `export enum ${typeVarName} {\n${enumValues}\n}`
+      }
+      return `export type ${typeVarName} = number`
+    
+    case TypeKind.Object:
+    case TypeKind.DynamicObject:
+      if (type.members && type.members.length > 0) {
+        const members = type.members
+          .map(m => {
+            const memberType = getTypeScriptTypeForMember(m.type, varNameMap)
+            // Use quotes for property names that contain dots or other special characters
+            const propertyName = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(m.name) ? m.name : JSON.stringify(m.name)
+            return `  ${propertyName}: ${memberType}`
+          })
+          .join('\n')
+        return `export interface ${typeVarName} {\n${members}\n}`
+      }
+      return `export interface ${typeVarName} {}`
+    
+    default:
+      return ''
+  }
+}
+
+function getTypeScriptTypeForMember(type: TypeDescription, varNameMap: Map<TypeDescription, string>): string {
+  switch (type.kind) {
+    case TypeKind.Void:
+      return 'void'
+    case TypeKind.UnsignedInteger:
+    case TypeKind.SignedInteger:
+    case TypeKind.FloatingPoint:
+      return 'number'
+    case TypeKind.Boolean:
+      return 'boolean'
+    case TypeKind.String:
+      return 'string'
+    case TypeKind.Binary:
+      return 'Uint8Array'
+    case TypeKind.Array:
+      if (type.item) {
+        const itemType = getTypeScriptTypeForMember(type.item, varNameMap)
+        return `${itemType}[]`
+      }
+      return 'any[]'
+    case TypeKind.Pointer:
+      if (type.item) {
+        const itemType = getTypeScriptTypeForMember(type.item, varNameMap)
+        return `${itemType} | null`
+      }
+      return 'any | null'
+    case TypeKind.Map:
+      if (type.key && type.item) {
+        const keyType = getTypeScriptTypeForMember(type.key, varNameMap)
+        const itemType = getTypeScriptTypeForMember(type.item, varNameMap)
+        return `Map<${keyType}, ${itemType}>`
+      }
+      return 'Map<any, any>'
+    case TypeKind.Enum:
+    case TypeKind.Object:
+    case TypeKind.DynamicObject:
+      const varName = varNameMap.get(type)
+      if (varName) {
+        return varName
+      }
+      return type.name || 'any'
+    default:
+      return 'any'
+  }
+}
+
 export function generateTypeRegistryCode(
   registry: TypeRegistry,
   fnName: string
@@ -77,9 +158,23 @@ export function generateTypeRegistryCode(
   const varNameMap = new Map<TypeDescription, string>()
   types.forEach((type, i) => varNameMap.set(type, varNames[i]))
 
+  // Generate TypeScript type definitions
+  const typesLines: string[] = []
+  typesLines.push('// TypeScript type definitions')
+  for (let i = 0; i < types.length; i++) {
+    const type = types[i]
+    const varName = varNames[i]
+    const tsType = generateTypeScriptType(type, varNameMap, varName)
+    if (tsType) {
+      typesLines.push(tsType)
+      typesLines.push('')
+    }
+  }
+
   const lines: string[] = []
-  lines.push(`export function ${fnName}(): TypeRegistry {`)
+  lines.push(`export function ${fnName}(): { registry: TypeRegistry, types: { [key: string]: TypeDescription } } {`)
   lines.push('  const registry = new TypeRegistry()')
+  lines.push('  const types: { [key: string]: TypeDescription } = {}')
   lines.push('')
 
   // Step 1: declare type vars
@@ -97,6 +192,7 @@ export function generateTypeRegistryCode(
       lines.push('    bases: [],')
     }
     lines.push('  })')
+    lines.push(`  types['${varName}'] = ${varName}`)
     lines.push('')
   }
 
@@ -168,13 +264,14 @@ export function generateTypeRegistryCode(
     }
   }
 
-  lines.push('  return registry')
+  lines.push('  return { registry, types }')
   lines.push('}')
 
   return {
     varNames,
     varNameMap,
-    registryCode: lines.join('\n')
+    registryCode: lines.join('\n'),
+    typesCode: typesLines.join('\n')
   }
 }
 
@@ -185,6 +282,8 @@ export function generateTsTypeRegistry(registry: TypeRegistry, options: TsRegist
   const lines: string[] = []
   lines.push('// Auto-generated TypeScript TypeRegistry builder')
   lines.push("import { TypeRegistry, TypeDescription, TypeKind } from '@wa-os/ts-rpc'")
+  lines.push('')
+  lines.push(result.typesCode)
   lines.push('')
   lines.push(result.registryCode)
   lines.push('')

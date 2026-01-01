@@ -795,5 +795,22 @@ export class CircularBuffer {
     }
     return bytesWritten
   }
+
+  copyTo(destination: CircularBuffer): number {
+    const readableBytes = this.readableBytes()
+    const writableBytes = destination.writableBytes()
+    const copyBytes = Math.min(readableBytes, writableBytes)
+    /// read bytes to from read offset to end of this buffer, by writing them to destination buffer
+    const readOffset = this.getReadOffset()
+    const readAtEnd = Math.min(this.getSize() - readOffset, copyBytes)
+    const readAtStart = copyBytes - readAtEnd
+    if (readAtEnd > 0) {
+      destination.write(this.getDataBuffer().subarray(readOffset, readOffset + readAtEnd), readAtEnd)
+    }
+    if (readAtStart > 0) {
+      destination.write(this.getDataBuffer().subarray(0, readAtStart), readAtEnd)
+    }
+    return copyBytes
+  }
 }
 
