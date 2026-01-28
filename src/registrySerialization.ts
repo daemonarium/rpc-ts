@@ -78,13 +78,13 @@ export function createTypeRegistrySerializationRegistry(): TypeRegistry {
   })
 
   const enumMemberEntryType = TypeDescription.create({ 
-    name: 'pair<basic_string<char, char_traits<char>, allocator<char>>, unsigned long>', kind: TypeKind.Object, members: [
-      { name: 'first', type: registry.getTypeByName('string'), annotations: [] },
-      { name: 'second', type: registry.getTypeByName('uint'), annotations: [] }
+    name: 'enum_member', kind: TypeKind.Object, members: [
+      { name: 'name', type: registry.getTypeByName('string'), annotations: [] },
+      { name: 'value', type: registry.getTypeByName('uint'), annotations: [] }
     ] 
   })
   const enumMembersType = TypeDescription.create({ 
-    name: 'vector<pair<basic_string<char, char_traits<char>, allocator<char>>, uint64_t>, allocator<pair<basic_string<char, char_traits<char>, allocator<char>>, uint64_t>>>',
+    name: 'vector<enum_member>',
     kind: TypeKind.Array, item: enumMemberEntryType 
   })
   const typeDescriptionListType = TypeDescription.create({ 
