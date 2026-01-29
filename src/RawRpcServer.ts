@@ -12,12 +12,13 @@ export interface MethodDescription {
   idType?: TypeDescription // for dynamic methods
 }
 
-export class RpcServer {
+export class RawRpcServer {
   private readonly handlers = new Map<number, RpcHandler>()
   private readonly typeRegistry: TypeRegistry
 
   constructor(typeRegistry: TypeRegistry) {
     this.typeRegistry = typeRegistry
+    this.registerFromRegistry()
   }
 
   /**

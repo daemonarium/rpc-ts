@@ -3,17 +3,12 @@ import type { Writer } from './writer.js'
 import type { TypeRegistry, TypeDescription, RegisteredMethod } from './typeDescription.js'
 import { TypeKind } from './typeDescription.js'
 import { serializeValueByType, deserializeValueByType, type JsonValue } from './valueSerialization.js'
-
-export class RpcException extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'RpcException'
-  }
-}
+import { RpcException } from './RpcException.js'
+import type { RpcClient } from './RpcClient.js'
 
 type ResponseHandler = (reader: Reader) => void
 
-export class RpcClient {
+export class RawRpcClient implements RpcClient {
   private readonly responseHandlers = new Map<number, ResponseHandler>()
   private lastRequestId = 0
   private readonly writer: Writer
@@ -31,7 +26,7 @@ export class RpcClient {
     }
   }
 
-  private getMethod(methodId: number): RegisteredMethod {
+  getMethod(methodId: number): RegisteredMethod {
     const method = this.methodsById.get(methodId)
     if (!method) {
       throw new Error(`Method with id ${methodId} not found in registry`)
