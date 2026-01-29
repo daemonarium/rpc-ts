@@ -17,7 +17,8 @@ export enum TypeKind {
   Pointer = 11,
   Map = 12,
   Function = 16,
-  Method = 17
+  Method = 17,
+  Message = 18
 }
 
 export interface TypeMember {

@@ -47,6 +47,7 @@ function getTypeString(type: TypeDescription, varNameMap: Map<TypeDescription, s
       return 'any[]'
     case TypeKind.Object:
     case TypeKind.DynamicObject:
+    case TypeKind.Message:
       // Use the generated TypeScript type name (variable name from registry)
       const objVarName = varNameMap.get(type)
       if (objVarName) {

@@ -2,7 +2,7 @@ import { TypeKind, type TypeDescription, type TypeMember, type TypeRegistry } fr
 import type { GeneratorOptions } from './cppClient.js'
 
 function isPairType(type: TypeDescription): boolean {
-  if (type.kind !== TypeKind.Object && type.kind !== TypeKind.DynamicObject) {
+  if (type.kind !== TypeKind.Object && type.kind !== TypeKind.DynamicObject && type.kind !== TypeKind.Message) {
     return false
   }
   const name = type.name?.toLowerCase() || ''
@@ -18,7 +18,7 @@ function isPairType(type: TypeDescription): boolean {
 }
 
 function isTupleType(type: TypeDescription): boolean {
-  if (type.kind !== TypeKind.Object && type.kind !== TypeKind.DynamicObject) {
+  if (type.kind !== TypeKind.Object && type.kind !== TypeKind.DynamicObject && type.kind !== TypeKind.Message) {
     return false
   }
   const name = type.name?.toLowerCase() || ''
@@ -35,7 +35,7 @@ export function generateCppServerCode(registry: TypeRegistry, options: Generator
 
   const enums = types.filter(type => type.kind === TypeKind.Enum)
   const objects = types.filter(type => {
-    if (type.kind !== TypeKind.Object && type.kind !== TypeKind.DynamicObject) {
+    if (type.kind !== TypeKind.Object && type.kind !== TypeKind.DynamicObject && type.kind !== TypeKind.Message) {
       return false
     }
     // Exclude pair and tuple types as they use std::pair and std::tuple
@@ -284,6 +284,7 @@ function getCppType(type: TypeDescription): string {
       return 'std::vector<void>'
     case TypeKind.Object:
     case TypeKind.DynamicObject:
+    case TypeKind.Message:
       return type.name || 'void'
     case TypeKind.Pointer:
       if (type.item) {

@@ -8,7 +8,7 @@ export interface GeneratorOptions {
 export function generateCppGlueCode(registry: TypeRegistry, options: GeneratorOptions = {}): string {
   const namespace = options.namespace
   const objectTypes = registry.getTypes().filter(type =>
-    type.kind === TypeKind.Object || type.kind === TypeKind.DynamicObject
+    type.kind === TypeKind.Object || type.kind === TypeKind.DynamicObject || type.kind === TypeKind.Message
   )
 
   const objectsWithMethods = objectTypes
@@ -100,7 +100,7 @@ function buildMethodIdMap(registry: TypeRegistry): Map<TypeDescription, number> 
   const map = new Map<TypeDescription, number>()
   let id = 0
   for (const type of registry.getTypes()) {
-    if (type.kind !== TypeKind.Object && type.kind !== TypeKind.DynamicObject) continue
+    if (type.kind !== TypeKind.Object && type.kind !== TypeKind.DynamicObject && type.kind !== TypeKind.Message) continue
     for (const member of type.members || []) {
       if (member.type.kind === TypeKind.Method || member.type.kind === TypeKind.Function) {
         map.set(member.type, member.type.methodId ?? id)

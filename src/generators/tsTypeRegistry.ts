@@ -53,6 +53,7 @@ export function renderKind(kind: TypeKind): string {
     case TypeKind.Array: return 'TypeKind.Array'
     case TypeKind.Object: return 'TypeKind.Object'
     case TypeKind.DynamicObject: return 'TypeKind.DynamicObject'
+    case TypeKind.Message: return 'TypeKind.Message'
     case TypeKind.Pointer: return 'TypeKind.Pointer'
     case TypeKind.Map: return 'TypeKind.Map'
     case TypeKind.Function: return 'TypeKind.Function'
@@ -83,6 +84,7 @@ function generateTypeScriptType(type: TypeDescription, varNameMap: Map<TypeDescr
     
     case TypeKind.Object:
     case TypeKind.DynamicObject:
+    case TypeKind.Message:
       if (type.members && type.members.length > 0) {
         const members = type.members
           .map(m => {
@@ -137,6 +139,7 @@ function getTypeScriptTypeForMember(type: TypeDescription, varNameMap: Map<TypeD
     case TypeKind.Enum:
     case TypeKind.Object:
     case TypeKind.DynamicObject:
+    case TypeKind.Message:
       const varName = varNameMap.get(type)
       if (varName) {
         return varName
