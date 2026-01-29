@@ -1,9 +1,14 @@
 export { Reader } from './reader.js'
 export { Writer } from './writer.js'
 export { CircularBuffer } from './CircularBuffer.js'
+export { MemoryCircularBuffer } from './MemoryCircularBuffer.js'
+export { LocalCircularBuffer } from './LocalCircularBuffer.js'
 export { CircularBufferReader } from './CircularBufferReader.js'
 export { CircularBufferWriter } from './CircularBufferWriter.js'
-export { ModuleSockets, Socket, SOCKET_FLAG_OPEN, SOCKET_FLAG_READABLE, SOCKET_FLAG_WRITABLE, SOCKET_FLAG_ERROR } from './ModuleSockets.js'
+export { Socket } from './Socket.js'
+export { ModuleSockets, ModuleSocket, SOCKET_FLAG_OPEN, SOCKET_FLAG_READABLE, SOCKET_FLAG_WRITABLE, SOCKET_FLAG_ERROR } from './ModuleSockets.js'
+export { LocalSocket, SocketOptions } from './LocalSocket.js'
+export { LocalSockets } from './LocalSockets.js'
 export { CodecRegistry, type TypedValue } from './codec.js'
 export {
   TypeDescription,

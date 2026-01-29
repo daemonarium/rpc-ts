@@ -1,4 +1,6 @@
 import { CircularBuffer } from './CircularBuffer.js'
+import { MemoryCircularBuffer } from './MemoryCircularBuffer.js'
+import { Socket } from './Socket.js'
 
 /**
  * Socket flags matching C definitions
@@ -38,7 +40,7 @@ const SOCKET_INFO_FLAGS_OFFSET = 28
 /**
  * Represents a single socket with input and output buffers
  */
-export class Socket {
+export class ModuleSocket implements Socket {
   private memory: WebAssembly.Memory
   private socketIndex: number
   private socketInfoPtr: number
@@ -64,9 +66,9 @@ export class Socket {
     const inputBufferDataPtr = this.dataView.getUint32(SOCKET_INFO_INPUT_BUFFER_DATA_OFFSET, true)
     const outputBufferDataPtr = this.dataView.getUint32(SOCKET_INFO_OUTPUT_BUFFER_DATA_OFFSET, true)
 
-    // Create CircularBuffer instances
-    this.inputBuffer = new CircularBuffer(memory, inputBufferDataPtr)
-    this.outputBuffer = new CircularBuffer(memory, outputBufferDataPtr)
+    // Create MemoryCircularBuffer instances
+    this.inputBuffer = new MemoryCircularBuffer(memory, inputBufferDataPtr)
+    this.outputBuffer = new MemoryCircularBuffer(memory, outputBufferDataPtr)
   }
 
   /**
@@ -280,7 +282,7 @@ export class ModuleSockets {
     }
 
     // Create and cache socket
-    const socket = new Socket(this.memory, index, socketInfoPtr)
+    const socket = new ModuleSocket(this.memory, index, socketInfoPtr)
     this.sockets.set(index, socket)
     return socket
   }

@@ -14,7 +14,7 @@ async function loadWasmModule(filePath: string): Promise<TypeRegistry> {
   const imports = {
     env: {
       memory: memory,
-      send_message: (_channel: number, _buffer: ArrayBuffer, _size: number) => {
+      send_message: (_socket: number, _buffer: ArrayBuffer, _size: number) => {
         // No-op for CLI
       },
     },
