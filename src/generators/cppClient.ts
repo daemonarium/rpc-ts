@@ -46,7 +46,7 @@ export function generateCppGlueCode(registry: TypeRegistry, options: GeneratorOp
 
   // Generate one client class per object type
   for (const { type, methods } of objectsWithMethods) {
-    const defaultName = type.name ? `${type.name}Rpc` : 'GeneratedRpc'
+    const defaultName = type.name ? `${type.name}_rpc` : 'generated_rpc'
     const finalClassName =
       objectsWithMethods.length === 1 && options.className
         ? options.className
