@@ -27,6 +27,8 @@ export interface SocketOptions {
   outputNewLengthCallback?: (requestedLength: number) => number
   dataEventCallback?: (dataSize: number) => void
   drainEventCallback?: (dataSize: number) => void
+  flushCallback?: (socket: number) => void
+  drainCallback?: (socket: number) => void
 }
 
 /**
@@ -50,6 +52,8 @@ export class LocalSocket implements Socket {
   private drainEventThreshold: number
   private dataEventCallback?: (dataSize: number) => void
   private drainEventCallback?: (dataSize: number) => void
+  private flushCallback?: (socket: number) => void
+  private drainCallback?: (socket: number) => void
 
   /**
    * Creates a LocalSocket with local buffers
@@ -63,6 +67,8 @@ export class LocalSocket implements Socket {
     this.drainEventThreshold = options.drainEventThreshold
     this.dataEventCallback = options.dataEventCallback
     this.drainEventCallback = options.drainEventCallback
+    this.flushCallback = options.flushCallback
+    this.drainCallback = options.drainCallback
 
     this.inputBuffer = new LocalCircularBuffer(
       options.inputBufferSize,
@@ -117,38 +123,38 @@ export class LocalSocket implements Socket {
   }
 
   /**
-   * Get number of readable bytes in output buffer
+   * Get number of readable bytes in input buffer
    */
   readableBytes(): number {
-    return this.outputBuffer.readableBytes()
+    return this.inputBuffer.readableBytes()
   }
 
   /**
-   * Get number of writable bytes in input buffer
+   * Get number of writable bytes in output buffer
    */
   writableBytes(): number {
-    return this.inputBuffer.writableBytes()
+    return this.outputBuffer.writableBytes()
   }
 
   /**
-   * Read data from output buffer
+   * Read data from input buffer
    */
   read(destination: Uint8Array, bytes: number): number {
-    return this.outputBuffer.read(destination, bytes)
+    return this.inputBuffer.read(destination, bytes)
   }
 
   /**
-   * Write data to input buffer
+   * Write data to output buffer
    * Automatically triggers flush if flush_threshold is reached
    */
   write(source: Uint8Array | ArrayBufferView, bytes: number): number {
     const sourceArray = source instanceof Uint8Array
       ? source
       : new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
-    const written = this.inputBuffer.write(sourceArray, bytes)
+    const written = this.outputBuffer.write(sourceArray, bytes)
     
     // Check if flush threshold is reached
-    const readableBytes = this.inputBuffer.readableBytes()
+    const readableBytes = this.outputBuffer.readableBytes()
     if (readableBytes >= this.flushThreshold) {
       this.flush()
     }
@@ -157,59 +163,59 @@ export class LocalSocket implements Socket {
   }
 
   /**
-   * Peek data from output buffer without removing it
+   * Peek data from input buffer without removing it
    */
   peek(offset: number, destination: Uint8Array, bytes: number): number {
-    return this.outputBuffer.peek(offset, destination, bytes)
+    return this.inputBuffer.peek(offset, destination, bytes)
   }
 
   /**
-   * Poke data to input buffer without moving write offset
+   * Poke data to output buffer without moving write offset
    */
   poke(offset: number, source: Uint8Array, bytes: number): number {
-    return this.inputBuffer.poke(offset, source, bytes)
+    return this.outputBuffer.poke(offset, source, bytes)
   }
 
   /**
-   * Skip reading bytes from output buffer
+   * Skip reading bytes from input buffer
    */
   skipRead(bytes: number): number {
-    return this.outputBuffer.skipRead(bytes)
+    return this.inputBuffer.skipRead(bytes)
   }
 
   /**
-   * Commit write (move write offset forward) in input buffer
+   * Commit write (move write offset forward) in output buffer
    */
   commitWrite(bytes: number): number {
-    return this.inputBuffer.commitWrite(bytes)
+    return this.outputBuffer.commitWrite(bytes)
   }
 
   /**
-   * Read unsigned varint from output buffer
+   * Read unsigned varint from input buffer
    */
   readUVarInt(): { value: number | bigint, bytesRead: number } {
-    return this.outputBuffer.readUVarInt()
+    return this.inputBuffer.readUVarInt()
   }
 
   /**
-   * Write unsigned varint to input buffer
+   * Write unsigned varint to output buffer
    */
   writeUVarInt(value: number | bigint): number {
-    return this.inputBuffer.writeUVarInt(value)
+    return this.outputBuffer.writeUVarInt(value)
   }
 
   /**
-   * Read signed varint from output buffer
+   * Read signed varint from input buffer
    */
   readSVarInt(): { value: number | bigint, bytesRead: number } {
-    return this.outputBuffer.readSVarInt()
+    return this.inputBuffer.readSVarInt()
   }
 
   /**
-   * Write signed varint to input buffer
+   * Write signed varint to output buffer
    */
   writeSVarInt(value: number | bigint): number {
-    return this.inputBuffer.writeSVarInt(value)
+    return this.outputBuffer.writeSVarInt(value)
   }
 
   /**
@@ -257,14 +263,14 @@ export class LocalSocket implements Socket {
   }
 
   /**
-   * Get input buffer capacity
+   * Get input buffer capacity (for reading)
    */
   readCapacity(): number {
     return this.inputBuffer.capacity()
   }
 
   /**
-   * Get output buffer capacity
+   * Get output buffer capacity (for writing)
    */
   writeCapacity(): number {
     return this.outputBuffer.capacity()
@@ -272,15 +278,26 @@ export class LocalSocket implements Socket {
 
   /**
    * Flush the socket output buffer
-   * This is a placeholder - in a real implementation, this would send data
+   * Calls the flush callback if set, which handles copying data to connected sockets
    */
   flush(): void {
-    // In a real implementation, this would send data from outputBuffer
-    // For now, it's a placeholder that can be overridden or extended
+    if (this.flushCallback) {
+      this.flushCallback(this.index)
+    }
   }
 
   /**
-   * Handle data event - called when data is available
+   * Drain the socket input buffer
+   * Calls the drain callback if set, which handles copying data from connected sockets
+   */
+  drain(): void {
+    if (this.drainCallback) {
+      this.drainCallback(this.index)
+    }
+  }
+
+  /**
+   * Handle data event - called when data is available in input buffer
    */
   handleData(): void {
     const dataSize = this.inputBuffer.readableBytes()
@@ -290,7 +307,7 @@ export class LocalSocket implements Socket {
   }
 
   /**
-   * Handle drain event - called when buffer is drained
+   * Handle drain event - called when output buffer is drained
    */
   handleDrain(): void {
     const dataSize = this.outputBuffer.readableBytes()
@@ -321,6 +338,12 @@ export class LocalSocket implements Socket {
     if (options.drainEventCallback !== undefined) {
       this.drainEventCallback = options.drainEventCallback
     }
+    if (options.flushCallback !== undefined) {
+      this.flushCallback = options.flushCallback
+    }
+    if (options.drainCallback !== undefined) {
+      this.drainCallback = options.drainCallback
+    }
     if (options.inputBufferSize !== undefined) {
       this.inputBuffer.grow(options.inputBufferSize)
     }
@@ -342,6 +365,8 @@ export class LocalSocket implements Socket {
       flags: this.flags,
       dataEventCallback: this.dataEventCallback,
       drainEventCallback: this.drainEventCallback,
+      flushCallback: this.flushCallback,
+      drainCallback: this.drainCallback,
     }
   }
 

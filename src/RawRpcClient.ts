@@ -14,12 +14,14 @@ export class RawRpcClient implements RpcClient {
   private readonly writer: Writer
   private readonly typeRegistry: TypeRegistry
   private readonly sender: () => void
+  private readonly beforeSend: () => void
   private readonly methodsById = new Map<number, RegisteredMethod>()
 
-  constructor(writer: Writer, typeRegistry: TypeRegistry, sender: () => void) {
+  constructor(writer: Writer, typeRegistry: TypeRegistry, sender: () => void, beforeSend: () => void = () => {}) {
     this.writer = writer
     this.typeRegistry = typeRegistry
     this.sender = sender
+    this.beforeSend = beforeSend
     // Build method lookup map
     for (const method of typeRegistry.getMethods()) {
       this.methodsById.set(method.methodId, method)
@@ -66,6 +68,7 @@ export class RawRpcClient implements RpcClient {
         reader.readRest()
         resolve(result)
       })
+      this.beforeSend()
       this.writeCall(requestId, methodId, parameterTypes, args)
       this.sender()
     })
@@ -115,6 +118,7 @@ export class RawRpcClient implements RpcClient {
         reader.readRest()
         resolve(result)
       })
+      this.beforeSend()
       this.writeMethodCall(requestId, methodId, id, idType, parameterTypes, args)
       this.sender()
     })

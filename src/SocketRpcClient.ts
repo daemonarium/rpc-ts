@@ -20,13 +20,23 @@ export class SocketRpcClient implements RpcClient {
     this.reader = new CircularBufferReader(socket.inputBuffer, codecs)
     // Client writes requests to outputBuffer (data going out)
     this.writer = new CircularBufferWriter(socket.outputBuffer, codecs)
-    
+      
+    const beforeSend = () => {
+      socket.poke(0, new Uint8Array(4), 4)
+      this.writer.offset = 4
+    }
+
     const sender = () => {
+      // write the request length as uint32_t
+      const requestLength = new Uint32Array([this.writer.offset - 4])
+      socket.poke(0, new Uint8Array(requestLength.buffer), 4)
+      socket.commitWrite(this.writer.offset)      
       // Flush the socket to send data
+      const readable = socket.outputBuffer.readableBytes()
       socket.flush()
     }
     
-    this.rawRpcClient = new RawRpcClient(this.writer as any, typeRegistry, sender)
+    this.rawRpcClient = new RawRpcClient(this.writer as any, typeRegistry, sender, beforeSend)
     
     // Set up data event handler to process incoming responses
     socket.setOptions({

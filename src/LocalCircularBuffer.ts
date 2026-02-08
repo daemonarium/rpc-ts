@@ -496,11 +496,12 @@ export class LocalCircularBuffer implements CircularBuffer {
   }
 
   /**
-   * Write unsigned varint
+   * Poke unsigned varint
+   * @param offset Offset from write position
    * @param value Value to write
    * @returns Number of bytes written
    */
-  writeUVarInt(value: number | bigint): number {
+  pokeUVarInt(offset: number, value: number | bigint): number {
     const valueBig = typeof value === 'number' ? BigInt(value) : value
     if (valueBig < 0n) {
       throw new Error('UVarInt cannot be negative')
@@ -583,11 +584,22 @@ export class LocalCircularBuffer implements CircularBuffer {
       bytesWritten = 9
     }
 
-    const written = this.write(bytes.subarray(0, bytesWritten), bytesWritten)
+    const written = this.poke(offset, bytes.subarray(0, bytesWritten), bytesWritten)
     if (written !== bytesWritten) {
       throw new Error('Failed to write uvarint to circular buffer')
     }
     return bytesWritten
+  }
+
+  /**
+   * Write unsigned varint
+   * @param value Value to write
+   * @returns Number of bytes written
+   */
+  writeUVarInt(value: number | bigint): number {
+    const written =  this.pokeUVarInt(0, value)
+    this.commitWrite(written)
+    return written  
   }
 
   /**
@@ -714,11 +726,11 @@ export class LocalCircularBuffer implements CircularBuffer {
   }
 
   /**
-   * Write signed varint
+   * Poke signed varint
    * @param value Value to write
    * @returns Number of bytes written
    */
-  writeSVarInt(value: number | bigint): number {
+  pokeSVarInt(offset: number, value: number | bigint): number {
     const valueBig = typeof value === 'number' ? BigInt(value) : value
     const negative = valueBig < 0n
     const unsignedValue = negative ? -valueBig : valueBig
@@ -854,6 +866,12 @@ export class LocalCircularBuffer implements CircularBuffer {
       throw new Error('Failed to write svarint to circular buffer')
     }
     return bytesWritten
+  }
+
+  writeSVarInt(value: number | bigint): number {
+    const written = this.pokeSVarInt(0, value)
+    this.commitWrite(written)
+    return written
   }
 
   /**

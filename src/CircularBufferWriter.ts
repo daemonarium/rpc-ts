@@ -8,12 +8,18 @@ export class CircularBufferWriter {
   private readonly writtenPointers: unknown[] = []
   private readonly pendingPointers: Array<{ value: unknown, writeLater: WriteLater }> = []
   private readonly scratch = new ArrayBuffer(8)
-  private readonly scratchView = new DataView(this.scratch)
+  private readonly scratchView = new DataView(this.scratch)  
 
   constructor(
     private readonly buffer: CircularBuffer,
-    private readonly codecs: CodecRegistry
-  ) {}
+    private readonly codecs: CodecRegistry,
+    public offset: number = 0
+  ) {
+  }
+
+  getOffset(): number {
+    return this.offset
+  }
 
   beginFrame(): void {}
 
@@ -43,13 +49,13 @@ export class CircularBufferWriter {
 
   writeBool(value: boolean): void {
     const bytes = new Uint8Array([value ? 1 : 0])
-    this.buffer.write(bytes, 1)
+    this.offset += this.buffer.poke(this.offset, bytes, 1)
   }
 
   writeString(value: string): void {
     const encoded = this.textEncoder.encode(value)
     this.writeUVarInt(BigInt(encoded.length))
-    this.buffer.write(encoded, encoded.length)
+    this.offset += this.buffer.poke(this.offset, encoded, encoded.length)
   }
 
   writeBinary(value: ArrayBufferView | ArrayBuffer): void {
@@ -57,7 +63,7 @@ export class CircularBufferWriter {
       ? new Uint8Array(value)
       : new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
     this.writeUVarInt(BigInt(bytes.length))
-    this.buffer.write(bytes, bytes.length)
+    this.offset += this.buffer.poke(this.offset, bytes, bytes.length)
   }
 
   writeLength(length: number): void {
@@ -113,7 +119,7 @@ export class CircularBufferWriter {
     for (let i = 0; i < 8; ++i) {
       bytes[i] = Number((value >> BigInt(i * 8)) & 0xFFn)
     }
-    this.buffer.write(bytes, 8)
+    this.offset += this.buffer.poke(this.offset, bytes, 8)
   }
 
   private toUnsigned(value: bigint | number): bigint {
@@ -131,11 +137,11 @@ export class CircularBufferWriter {
     if (value < 0n) {
       throw new Error('UVarInt cannot be negative')
     }
-    this.buffer.writeUVarInt(value)
+    this.offset += this.buffer.pokeUVarInt(this.offset, value)
   }
 
   private writeSVarInt(value: bigint): void {
-    this.buffer.writeSVarInt(value)
+    this.offset += this.buffer.pokeSVarInt(this.offset, value)
   }
 }
 

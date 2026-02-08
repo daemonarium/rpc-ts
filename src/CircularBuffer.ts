@@ -122,6 +122,22 @@ export interface CircularBuffer {
   writeSVarInt(value: number | bigint): number
 
   /**
+   * Poke unsigned varint
+   * @param offset Offset from write position
+   * @param value Value to write
+   * @returns Number of bytes written
+   */
+  pokeUVarInt(offset: number, value: number | bigint): number
+
+  /**
+   * Poke signed varint
+   * @param offset Offset from write position
+   * @param value Value to write
+   * @returns Number of bytes written
+   */
+  pokeSVarInt(offset: number, value: number | bigint): number
+
+  /**
    * Copy data from this buffer to destination buffer
    * @param destination Destination buffer
    * @returns Number of bytes copied
