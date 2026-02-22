@@ -15,9 +15,13 @@ export interface MethodDescription {
 export class RawRpcServer {
   private readonly handlers = new Map<number, RpcHandler>()
   private readonly typeRegistry: TypeRegistry
+  private readonly beforeSend: () => void
+  private readonly sender: () => void
 
-  constructor(typeRegistry: TypeRegistry) {
+  constructor(typeRegistry: TypeRegistry, beforeSend: () => void, sender: () => void) {
     this.typeRegistry = typeRegistry
+    this.beforeSend = beforeSend
+    this.sender = sender
     this.registerFromRegistry()
   }
 
@@ -131,10 +135,12 @@ export class RawRpcServer {
 
     const handler = this.handlers.get(methodId)
     if (!handler) {
+      this.beforeSend()
       writer.writeU64(requestId)
       writer.writeBool(false)
       writer.writeString('Function not found')
       writer.writeRest()
+      this.sender()
       return
     }
 
@@ -166,18 +172,22 @@ export class RawRpcServer {
   ): Promise<void> {
     try {
       const result = await callFn()
+      this.beforeSend()
       writer.writeU64(requestId)
       writer.writeBool(true)
       if (returnType.kind !== TypeKind.Void) {
         serializeValueByType(writer, this.typeRegistry, returnType, result as JsonValue)
       }
       writer.writeRest()
+      this.sender()
     } catch (error) {
+      this.beforeSend()
       writer.writeU64(requestId)
       writer.writeBool(false)
       const errorMessage = error instanceof Error ? error.message : String(error)
       writer.writeString(errorMessage)
       writer.writeRest()
+      this.sender()
     }
   }
 }

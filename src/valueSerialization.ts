@@ -136,7 +136,7 @@ export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, t
     case TypeKind.Binary:
       return output(reader.readBinary())
     case TypeKind.Enum:
-      return output(resolveEnumName(type, reader.readU64()))
+      return output(resolveEnumValue(type, reader.readU64()))
     case TypeKind.Array:
       reader.enterFrame()
       {
