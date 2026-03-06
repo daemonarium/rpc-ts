@@ -62,13 +62,10 @@ export class ModuleSocket implements Socket {
     this.socketInfoPtr = socketInfoPtr
     this.dataView = new DataView(memory.buffer, socketInfoPtr)
 
-    // Read pointers to circular_buffer_data structures
-    const inputBufferDataPtr = this.dataView.getUint32(SOCKET_INFO_INPUT_BUFFER_DATA_OFFSET, true)
-    const outputBufferDataPtr = this.dataView.getUint32(SOCKET_INFO_OUTPUT_BUFFER_DATA_OFFSET, true)
-
-    // Create MemoryCircularBuffer instances
-    this.inputBuffer = new MemoryCircularBuffer(memory, inputBufferDataPtr)
-    this.outputBuffer = new MemoryCircularBuffer(memory, outputBufferDataPtr)
+    // Pass the address where the circular_buffer_data* pointer is stored
+    // so MemoryCircularBuffer reads it dynamically (survives realloc + memory growth)
+    this.inputBuffer = new MemoryCircularBuffer(memory, socketInfoPtr + SOCKET_INFO_INPUT_BUFFER_DATA_OFFSET)
+    this.outputBuffer = new MemoryCircularBuffer(memory, socketInfoPtr + SOCKET_INFO_OUTPUT_BUFFER_DATA_OFFSET)
   }
 
   /**
@@ -81,8 +78,12 @@ export class ModuleSocket implements Socket {
   /**
    * Check if socket is open
    */
+  private getDataView(): DataView {
+    return new DataView(this.memory.buffer, this.socketInfoPtr)
+  }
+
   isOpen(): boolean {
-    const flags = this.dataView.getUint8(SOCKET_INFO_FLAGS_OFFSET)
+    const flags = this.getDataView().getUint8(SOCKET_INFO_FLAGS_OFFSET)
     return (flags & SOCKET_FLAG_OPEN) !== 0
   }
 
@@ -90,7 +91,7 @@ export class ModuleSocket implements Socket {
    * Get socket flags
    */
   getFlags(): number {
-    return this.dataView.getUint8(SOCKET_INFO_FLAGS_OFFSET)
+    return this.getDataView().getUint8(SOCKET_INFO_FLAGS_OFFSET)
   }
 
   /**
@@ -242,11 +243,15 @@ export class ModuleSockets {
     this.dataView = new DataView(memory.buffer, socketsTablePtr)
   }
 
+  private getDataView(): DataView {
+    return new DataView(this.memory.buffer, this.socketsTablePtr)
+  }
+
   /**
    * Get the number of sockets in the table
    */
   getSize(): number {
-    return this.dataView.getUint32(SOCKETS_TABLE_SIZE_OFFSET, true)
+    return this.getDataView().getUint32(SOCKETS_TABLE_SIZE_OFFSET, true)
   }
 
   /**
@@ -273,7 +278,7 @@ export class ModuleSockets {
 
     // Calculate socket_info pointer
     const socketInfoPtr = this.socketsTablePtr + 4 + (index * SOCKET_INFO_SIZE)
-    const socketInfoView = new DataView(this.memory.buffer, socketInfoPtr)
+    const socketInfoView = new DataView(this.memory.buffer, socketInfoPtr)  // temporary view, OK if memory grows later
 
     // Check if socket is open
     const flags = socketInfoView.getUint8(SOCKET_INFO_FLAGS_OFFSET)

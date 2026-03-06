@@ -894,7 +894,7 @@ export class LocalCircularBuffer implements CircularBuffer {
       destination.write(dataBuffer.subarray(readOffset, readOffset + readAtEnd), readAtEnd)
     }
     if (readAtStart > 0) {
-      destination.write(dataBuffer.subarray(0, readAtStart), readAtEnd)
+      destination.write(dataBuffer.subarray(0, readAtStart), readAtStart)
     }
     
     // Advance read offset

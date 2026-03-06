@@ -29,7 +29,9 @@ export class CircularBufferReader {
   }
 
   readU64(): number | bigint {
-    return this.readUVarInt()
+    const val = this.readUVarInt()
+    console.log(`[CBR] readU64: value=${val}, readable after=${this.buffer.readableBytes()}`)
+    return val
   }
 
   readI64(): number | bigint {
@@ -66,7 +68,10 @@ export class CircularBufferReader {
 
   readBinary(): Uint8Array {
     const length = Number(this.readUVarInt())
-    return this.readBytes(length)
+    console.log(`[CBR] readBinary: length=${length}, readable before readBytes=${this.buffer.readableBytes()}`)
+    const result = this.readBytes(length)
+    console.log(`[CBR] readBinary: after readBytes, readable=${this.buffer.readableBytes()}, result.length=${result.length}`)
+    return result
   }
 
   readLength(): number {

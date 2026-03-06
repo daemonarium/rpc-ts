@@ -27,7 +27,7 @@
 
 import { CircularBuffer } from './CircularBuffer.js'
 
-const HEADER_SIZE = 12 // 3 * sizeof(uint32) for WASM32
+const HEADER_SIZE = 12 // 2 * sizeof(uint32) for WASM32
 const SIZE_OFFSET = 0
 const READ_OFFSET_OFFSET = 4
 const WRITE_OFFSET_OFFSET = 8
@@ -35,63 +35,56 @@ const DATA_OFFSET = 12
 
 export class MemoryCircularBuffer implements CircularBuffer {
   private memory: WebAssembly.Memory
-  private bufferPtr: number
-  private dataView: DataView
-  private uint8View: Uint8Array
+  private ptrAddress: number  // address in WASM memory where the circular_buffer_data* pointer is stored
 
   /**
-   * Creates a MemoryCircularBuffer that operates on WebAssembly memory
+   * Creates a MemoryCircularBuffer that operates on WebAssembly memory.
+   * The buffer pointer is read dynamically from ptrAddress each time,
+   * so it stays correct after circular_buffer_grow reallocations and memory growth.
+   *
    * @param memory WebAssembly memory instance
-   * @param bufferPtr Pointer to circular_buffer_data structure in WASM memory
+   * @param ptrAddress Address in WASM memory where the pointer to circular_buffer_data is stored
    */
-  constructor(memory: WebAssembly.Memory, bufferPtr: number) {
+  constructor(memory: WebAssembly.Memory, ptrAddress: number) {
     this.memory = memory
-    this.bufferPtr = bufferPtr
-    this.dataView = new DataView(memory.buffer, bufferPtr)
-    this.uint8View = new Uint8Array(memory.buffer, bufferPtr)
+    this.ptrAddress = ptrAddress
   }
 
   /**
-   * Get the size of the buffer (total capacity including header)
+   * Read the current circular_buffer_data pointer from WASM memory
    */
+  private getBufferPtr(): number {
+    return new DataView(this.memory.buffer).getUint32(this.ptrAddress, true)
+  }
+
+  private getView(): DataView {
+    return new DataView(this.memory.buffer, this.getBufferPtr())
+  }
+
   getSize(): number {
-    return this.dataView.getUint32(SIZE_OFFSET, true)
+    return this.getView().getUint32(SIZE_OFFSET, true)
   }
 
-  /**
-   * Get read offset
-   */
   getReadOffset(): number {
-    return this.dataView.getUint32(READ_OFFSET_OFFSET, true)
+    return this.getView().getUint32(READ_OFFSET_OFFSET, true)
   }
 
-  /**
-   * Set read offset
-   */
   setReadOffset(offset: number): void {
-    this.dataView.setUint32(READ_OFFSET_OFFSET, offset, true)
+    this.getView().setUint32(READ_OFFSET_OFFSET, offset, true)
   }
 
-  /**
-   * Get write offset
-   */
   getWriteOffset(): number {
-    return this.dataView.getUint32(WRITE_OFFSET_OFFSET, true)
+    return this.getView().getUint32(WRITE_OFFSET_OFFSET, true)
   }
 
-  /**
-   * Set write offset
-   */
   setWriteOffset(offset: number): void {
-    this.dataView.setUint32(WRITE_OFFSET_OFFSET, offset, true)
+    this.getView().setUint32(WRITE_OFFSET_OFFSET, offset, true)
   }
 
-  /**
-   * Get the data buffer (Uint8Array view of the data portion)
-   */
   private getDataBuffer(): Uint8Array {
-    const size = this.getSize()
-    return new Uint8Array(this.memory.buffer, this.bufferPtr + DATA_OFFSET, size - DATA_OFFSET)
+    const bufferPtr = this.getBufferPtr()
+    const size = new DataView(this.memory.buffer, bufferPtr).getUint32(SIZE_OFFSET, true)
+    return new Uint8Array(this.memory.buffer, bufferPtr + DATA_OFFSET, size - DATA_OFFSET)
   }
 
   /**
@@ -100,7 +93,7 @@ export class MemoryCircularBuffer implements CircularBuffer {
   readableBytes(): number {
     const readOffset = this.getReadOffset()
     const writeOffset = this.getWriteOffset()
-    const bufferSize = this.getSize() - DATA_OFFSET
+    const bufferSize = this.getSize() - HEADER_SIZE
 
     if (readOffset <= writeOffset) {
       return writeOffset - readOffset
@@ -115,7 +108,7 @@ export class MemoryCircularBuffer implements CircularBuffer {
   writableBytes(): number {
     const readOffset = this.getReadOffset()
     const writeOffset = this.getWriteOffset()
-    const bufferSize = this.getSize() - DATA_OFFSET
+    const bufferSize = this.getSize() - HEADER_SIZE
 
     if (readOffset <= writeOffset) {
       return bufferSize - writeOffset + readOffset - 1
@@ -128,7 +121,7 @@ export class MemoryCircularBuffer implements CircularBuffer {
    * Get buffer capacity (usable data space)
    */
   capacity(): number {
-    return this.getSize() - DATA_OFFSET - 1
+    return this.getSize() - HEADER_SIZE - 1
   }
 
   /**
@@ -146,7 +139,7 @@ export class MemoryCircularBuffer implements CircularBuffer {
     if (writeLength === 0) return 0
 
     const writeOffset = this.getWriteOffset()
-    const bufferSize = this.getSize() - DATA_OFFSET
+    const bufferSize = this.getSize() - HEADER_SIZE
     const dataBuffer = this.getDataBuffer()
 
     const writeAtEnd = Math.min(bufferSize - writeOffset, writeLength)
@@ -176,7 +169,7 @@ export class MemoryCircularBuffer implements CircularBuffer {
     if (readLength === 0) return 0
 
     const readOffset = this.getReadOffset()
-    const bufferSize = this.getSize() - DATA_OFFSET
+    const bufferSize = this.getSize() - HEADER_SIZE
     const dataBuffer = this.getDataBuffer()
 
     const readAtEnd = Math.min(bufferSize - readOffset, readLength)
@@ -209,7 +202,7 @@ export class MemoryCircularBuffer implements CircularBuffer {
     if (readLength === 0) return 0
 
     const readOffset = this.getReadOffset()
-    const bufferSize = this.getSize() - DATA_OFFSET
+    const bufferSize = this.getSize() - HEADER_SIZE
     const dataBuffer = this.getDataBuffer()
 
     const readAtEnd = Math.min(bufferSize - readOffset, readLength)
@@ -246,7 +239,7 @@ export class MemoryCircularBuffer implements CircularBuffer {
     if (writeLength === 0) return 0
 
     const writeOffset = this.getWriteOffset()
-    const bufferSize = this.getSize() - DATA_OFFSET
+    const bufferSize = this.getSize() - HEADER_SIZE
     const dataBuffer = this.getDataBuffer()
 
     const sourceArray = source instanceof Uint8Array 
@@ -283,7 +276,7 @@ export class MemoryCircularBuffer implements CircularBuffer {
     if (readLength === 0) return 0
 
     const readOffset = this.getReadOffset()
-    const bufferSize = this.getSize() - DATA_OFFSET
+    const bufferSize = this.getSize() - HEADER_SIZE
     const newReadOffset = (readOffset + readLength) % bufferSize
     this.setReadOffset(newReadOffset)
 
@@ -300,7 +293,7 @@ export class MemoryCircularBuffer implements CircularBuffer {
     if (writeLength === 0) return 0
 
     const writeOffset = this.getWriteOffset()
-    const bufferSize = this.getSize() - DATA_OFFSET
+    const bufferSize = this.getSize() - HEADER_SIZE
     const newWriteOffset = (writeOffset + writeLength) % bufferSize
     this.setWriteOffset(newWriteOffset)
 
@@ -828,7 +821,7 @@ export class MemoryCircularBuffer implements CircularBuffer {
     const copyBytes = Math.min(readableBytes, writableBytes)
     // read bytes from read offset to end of this buffer, by writing them to destination buffer
     const readOffset = this.getReadOffset()
-    const bufferSize = this.getSize() - DATA_OFFSET
+    const bufferSize = this.getSize() - HEADER_SIZE
     const readAtEnd = Math.min(bufferSize - readOffset, copyBytes)
     const readAtStart = copyBytes - readAtEnd
     const dataBuffer = this.getDataBuffer()
@@ -837,7 +830,7 @@ export class MemoryCircularBuffer implements CircularBuffer {
       destination.write(dataBuffer.subarray(readOffset, readOffset + readAtEnd), readAtEnd)
     }
     if (readAtStart > 0) {
-      destination.write(dataBuffer.subarray(0, readAtStart), readAtEnd)
+      destination.write(dataBuffer.subarray(0, readAtStart), readAtStart)
     }
     
     // Advance read offset
