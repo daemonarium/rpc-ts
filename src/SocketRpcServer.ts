@@ -2,13 +2,13 @@ import type { TypeRegistry } from './typeDescription.js'
 import { RawRpcServer } from './RawRpcServer.js'
 import { LocalSocket } from './LocalSocket.js'
 import { CircularBufferReader } from './CircularBufferReader.js'
-import { CircularBufferWriter } from './CircularBufferWriter.js'
+import { LocalCircularBufferWriter } from './LocalCircularBufferWriter.js'
 import { CodecRegistry } from './codec.js'
 
 export class SocketRpcServer {
   private readonly rawRpcServer: RawRpcServer
   private readonly reader: CircularBufferReader
-  private readonly writer: CircularBufferWriter
+  private readonly writer: LocalCircularBufferWriter
   private readonly socket: LocalSocket
   private processing = false
   private pendingData = false
@@ -18,7 +18,7 @@ export class SocketRpcServer {
     // Server reads requests from inputBuffer (data coming in)
     this.reader = new CircularBufferReader(socket.inputBuffer, codecs)
     // Server writes responses to outputBuffer (data going out)
-    this.writer = new CircularBufferWriter(socket.outputBuffer, codecs)
+    this.writer = new LocalCircularBufferWriter(socket.outputBuffer, codecs)
     const beforeSend = () => {
       socket.poke(0, new Uint8Array(4), 4)
       this.writer.offset = 4

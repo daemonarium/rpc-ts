@@ -26,7 +26,7 @@ function defaultNewLength(requestedLength: number): number {
 export class LocalCircularBuffer implements CircularBuffer {
   private buffer: ArrayBuffer
   private dataView: DataView
-  private uint8View: Uint8Array
+ /*  private */ uint8View: Uint8Array
   private newLengthCallback: (requestedLength: number) => number
 
   /**
@@ -155,29 +155,16 @@ export class LocalCircularBuffer implements CircularBuffer {
     newDataView.setUint32(READ_OFFSET_OFFSET, readOffset, true)
     newDataView.setUint32(WRITE_OFFSET_OFFSET, writeOffset, true)
 
-    // Copy data
+    // Copy data - copy entire buffer like C does (preserves poke/uncommitted data)
     const oldDataBuffer = this.getDataBuffer()
     const newDataBuffer = new Uint8Array(newBuffer, DATA_OFFSET, newBufferLength)
+    newDataBuffer.set(oldDataBuffer.subarray(0, oldBufferSize), 0)
 
-    if (readOffset <= writeOffset) {
-      // Data is contiguous, copy it directly
-      newDataBuffer.set(oldDataBuffer.subarray(readOffset, writeOffset), readOffset)
-    } else {
-      // Data wraps around, need to move read offset
+    if (readOffset > writeOffset) {
+      // Data wraps around, move read offset segment (same as C)
       const newReadOffset = readOffset + bufferIncrement
       const bytesToMove = oldBufferSize - readOffset
-      
-      // Copy data from old read offset to end
-      newDataBuffer.set(
-        oldDataBuffer.subarray(readOffset, oldBufferSize),
-        newReadOffset
-      )
-      // Copy data from start to write offset
-      newDataBuffer.set(
-        oldDataBuffer.subarray(0, writeOffset),
-        0
-      )
-      
+      newDataBuffer.copyWithin(newReadOffset, readOffset, readOffset + bytesToMove)
       newDataView.setUint32(READ_OFFSET_OFFSET, newReadOffset, true)
     }
 
