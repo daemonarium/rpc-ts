@@ -132,7 +132,6 @@ export class RawRpcServer {
   async handleCall(reader: Reader, writer: Writer): Promise<void> {
     const requestId = Number(reader.readU64())
     const methodId = Number(reader.readU64())
-    console.log(`[RPC] handleCall requestId=${requestId} methodId=${methodId}`)
 
     const handler = this.handlers.get(methodId)
     if (!handler) {
@@ -161,7 +160,6 @@ export class RawRpcServer {
       })
       args.push(argValue)
     }
-    console.log(`[RPC] callWithArgs args:`, args.map(a => a instanceof Uint8Array ? `Uint8Array(${a.byteLength})` : a))
     reader.readRest()
     return handler(...args)
   }

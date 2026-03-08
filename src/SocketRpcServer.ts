@@ -74,8 +74,6 @@ export class SocketRpcServer {
         // Convert to uint32 (little-endian, matching C++)
         const dataView = new DataView(lengthBuffer.buffer, lengthBuffer.byteOffset, lengthBuffer.byteLength)
         const messageLength = dataView.getUint32(0, true)
-        console.log(`[SRS] messageLength=${messageLength}, available=${this.socket.inputBuffer.readableBytes()}`)
-
         // Check if we have enough data for the full message
         let available = this.socket.inputBuffer.readableBytes()
         if (available < LENGTH_SIZE + messageLength) {           
