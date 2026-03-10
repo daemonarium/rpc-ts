@@ -18,7 +18,8 @@ export enum TypeKind {
   Map = 12,
   Function = 16,
   Method = 17,
-  Message = 18
+  Message = 18,
+  Exception = 19
 }
 
 export interface TypeMember {
