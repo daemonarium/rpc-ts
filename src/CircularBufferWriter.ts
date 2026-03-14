@@ -36,15 +36,17 @@ export class CircularBufferWriter {
   }
 
   writeF64(value: number): void {
+    // Same encoding as C++ circular_buffer_writer: transform then write big-endian.
     this.scratchView.setFloat64(0, value, true)
     let bits = this.scratchView.getBigUint64(0, true)
     const signMask = 0x8000000000000000n
     if ((bits & signMask) !== 0n) {
-      bits ^= signMask
-    } else {
       bits = (~bits) & 0xFFFFFFFFFFFFFFFFn
+    } else {
+      bits ^= signMask
     }
-    this.writeLittleEndianUint64(bits)
+    if (value === 0) bits = 0x8000000000000000n
+    this.writeBigEndianUint64(bits)
   }
 
   writeBool(value: boolean): void {
@@ -118,6 +120,14 @@ export class CircularBufferWriter {
     const bytes = new Uint8Array(8)
     for (let i = 0; i < 8; ++i) {
       bytes[i] = Number((value >> BigInt(i * 8)) & 0xFFn)
+    }
+    this.offset += this.buffer.poke(this.offset, bytes, 8)
+  }
+
+  private writeBigEndianUint64(value: bigint): void {
+    const bytes = new Uint8Array(8)
+    for (let i = 0; i < 8; ++i) {
+      bytes[i] = Number((value >> BigInt((7 - i) * 8)) & 0xFFn)
     }
     this.offset += this.buffer.poke(this.offset, bytes, 8)
   }

@@ -10,7 +10,9 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/src/index.js"
+    "start": "node dist/src/index.js",
+    "test": "tsx node_modules/.bin/mocha --timeout 10000 'tests/**/*.test.ts'",
+    "test:watch": "tsx node_modules/.bin/mocha --watch --timeout 10000 'tests/**/*.test.ts'"
   },
   "bin": {
     "rpc-codegen": "./dist/src/codeGenCli.js"
@@ -19,6 +21,11 @@
     "yargs": "^17.7.2"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^22.18.11",
+    "chai": "^4.3.10",
+    "mocha": "^10.2.0",
+    "tsx": "^4.7.0",
     "typescript": "~5.9.0",
     "@types/yargs": "^17.0.32"
   }

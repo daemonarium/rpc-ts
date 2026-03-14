@@ -538,8 +538,8 @@ export class MemoryCircularBuffer implements CircularBuffer {
   }
 
   /**
-   * Read signed varint
-   * @returns Value and number of bytes read
+   * Read signed varint (same encoding as C++ circular_buffer_peek_svarint).
+   * Negative: length = leading zeros then a one. Positive: leading ones then a zero.
    */
   readSVarInt(): { value: number | bigint, bytesRead: number } {
     const number = new Uint8Array(9)
@@ -549,122 +549,108 @@ export class MemoryCircularBuffer implements CircularBuffer {
     const first = number[0]
     const negative = (first & 0x80) === 0
 
-    if ((first & 0x40) === 0) {
-      // 6 bit signed number encoded in 1 byte
-      const raw = first & 0x3F
-      const mask = 0x3F
-      const value = negative ? -(((~raw) & mask)) : raw
-      this.skipRead(1)
-      return { value, bytesRead: 1 }
-    }
-    if ((first & 0x20) === 0) {
-      // 13 bit signed number encoded in 2 bytes
-      const secondRead = this.peek(1, number.subarray(1), 1)
-      if (secondRead === 0) return { value: 0, bytesRead: 0 }
-      const raw = ((first & 0x1F) << 8) | number[1]
-      const mask = 0x3FFF
-      const value = negative ? -(((~raw) & mask)) : raw
-      this.skipRead(2)
-      return { value, bytesRead: 2 }
-    }
-    if ((first & 0x10) === 0) {
-      // 20 bit signed number encoded in 3 bytes
-      const secondRead = this.peek(1, number.subarray(1), 2)
-      if (secondRead === 0) return { value: 0, bytesRead: 0 }
-      const raw = ((first & 0x0F) << 16) | (number[1] << 8) | number[2]
-      const mask = 0x1FFFF
-      const value = negative ? -(((~raw) & mask)) : raw
-      this.skipRead(3)
-      return { value, bytesRead: 3 }
-    }
-    if ((first & 0x08) === 0) {
-      // 27 bit signed number encoded in 4 bytes
-      const secondRead = this.peek(1, number.subarray(1), 3)
-      if (secondRead === 0) return { value: 0, bytesRead: 0 }
-      const raw = ((first & 0x07) << 24) | (number[1] << 16) | (number[2] << 8) | number[3]
-      const mask = 0xFFFFFF
-      const value = negative ? -(((~raw) & mask)) : raw
-      this.skipRead(4)
-      return { value, bytesRead: 4 }
-    }
-    if ((first & 0x04) === 0) {
-      // 34 bit signed number encoded in 5 bytes
-      const secondRead = this.peek(1, number.subarray(1), 4)
-      if (secondRead === 0) return { value: 0, bytesRead: 0 }
-      const rawBig = (BigInt(first & 0x03) << 32n)
-        | (BigInt(number[1]) << 24n)
-        | (BigInt(number[2]) << 16n)
-        | (BigInt(number[3]) << 8n)
-        | BigInt(number[4])
-      const mask = BigInt('0x7FFFFFFF')
-      const valueBig = negative ? -(((~rawBig) & mask)) : rawBig
-      this.skipRead(5)
-      if (valueBig >= BigInt(Number.MIN_SAFE_INTEGER) && valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
-        return { value: Number(valueBig), bytesRead: 5 }
+    const ret = (value: number | bigint, bytesRead: number) => {
+      this.skipRead(bytesRead)
+      if (typeof value === 'bigint' && value >= BigInt(Number.MIN_SAFE_INTEGER) && value <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        return { value: Number(value), bytesRead }
       }
-      return { value: valueBig, bytesRead: 5 }
+      return { value, bytesRead }
     }
-    if ((first & 0x02) === 0) {
-      // 41 bit signed number encoded in 6 bytes
-      const secondRead = this.peek(1, number.subarray(1), 5)
-      if (secondRead === 0) return { value: 0, bytesRead: 0 }
-      const rawBig = (BigInt(first & 0x01) << 40n)
-        | (BigInt(number[1]) << 32n)
-        | (BigInt(number[2]) << 24n)
-        | (BigInt(number[3]) << 16n)
-        | (BigInt(number[4]) << 8n)
-        | BigInt(number[5])
-      const mask = BigInt('0x7FFFFFFFFF')
-      const valueBig = negative ? -(((~rawBig) & mask)) : rawBig
-      this.skipRead(6)
-      if (valueBig >= BigInt(Number.MIN_SAFE_INTEGER) && valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
-        return { value: Number(valueBig), bytesRead: 6 }
+
+    if (negative) {
+      if ((first & 0x40) !== 0) {
+        return ret(-((~first) & 0x3F), 1)
       }
-      return { value: valueBig, bytesRead: 6 }
-    }
-    if ((first & 0x01) === 0) {
-      // 48 bit signed number encoded in 7 bytes
-      const secondRead = this.peek(1, number.subarray(1), 6)
-      if (secondRead === 0) return { value: 0, bytesRead: 0 }
-      const rawBig = (BigInt(number[1]) << 40n)
-        | (BigInt(number[2]) << 32n)
-        | (BigInt(number[3]) << 24n)
-        | (BigInt(number[4]) << 16n)
-        | (BigInt(number[5]) << 8n)
-        | BigInt(number[6])
-      const mask = BigInt('0x7FFFFFFFFFFFFF')
-      const valueBig = negative ? -(((~rawBig) & mask)) : rawBig
-      this.skipRead(7)
-      if (valueBig >= BigInt(Number.MIN_SAFE_INTEGER) && valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
-        return { value: Number(valueBig), bytesRead: 7 }
+      if ((first & 0xE0) === 0x20) {
+        const rest = this.peek(1, number.subarray(1), 1)
+        if (rest === 0) return { value: 0, bytesRead: 0 }
+        const encoded = ((first & 0x1F) << 8) | number[1]
+        return ret(-(0x1FFF - encoded), 2)
       }
-      return { value: valueBig, bytesRead: 7 }
+      if ((first & 0xF0) === 0x10) {
+        const rest = this.peek(1, number.subarray(1), 2)
+        if (rest < 2) return { value: 0, bytesRead: 0 }
+        const encoded = ((first & 0x0F) << 16) | (number[1] << 8) | number[2]
+        return ret(-(0xFFFFFn - BigInt(encoded)), 3)
+      }
+      if ((first & 0xF8) === 0x08) {
+        const rest = this.peek(1, number.subarray(1), 3)
+        if (rest < 3) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(first & 0x07) << 24n) | (BigInt(number[1]) << 16n) | (BigInt(number[2]) << 8n) | BigInt(number[3])
+        return ret(-(0x7FFFFFFn - encoded), 4)
+      }
+      if ((first & 0xFC) === 0x04) {
+        const rest = this.peek(1, number.subarray(1), 4)
+        if (rest < 4) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(first & 0x03) << 32n) | (BigInt(number[1]) << 24n) | (BigInt(number[2]) << 16n) | (BigInt(number[3]) << 8n) | BigInt(number[4])
+        return ret(-(0x3FFFFFFFFn - encoded), 5)
+      }
+      if ((first & 0xFE) === 0x02) {
+        const rest = this.peek(1, number.subarray(1), 5)
+        if (rest < 5) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(first & 0x01) << 40n) | (BigInt(number[1]) << 32n) | (BigInt(number[2]) << 24n) | (BigInt(number[3]) << 16n) | (BigInt(number[4]) << 8n) | BigInt(number[5])
+        return ret(-(0x1FFFFFFFFFFn - encoded), 6)
+      }
+      if (first === 0x01) {
+        const rest = this.peek(1, number.subarray(1), 6)
+        if (rest < 6) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(number[1]) << 40n) | (BigInt(number[2]) << 32n) | (BigInt(number[3]) << 24n) | (BigInt(number[4]) << 16n) | (BigInt(number[5]) << 8n) | BigInt(number[6])
+        return ret(-(0xFFFFFFFFFFFFn - encoded), 7)
+      }
+      const rest = this.peek(1, number.subarray(1), 8)
+      if (rest < 8) return { value: 0, bytesRead: 0 }
+      const encoded = (BigInt(number[1]) << 56n) | (BigInt(number[2]) << 48n) | (BigInt(number[3]) << 40n) | (BigInt(number[4]) << 32n) | (BigInt(number[5]) << 24n) | (BigInt(number[6]) << 16n) | (BigInt(number[7]) << 8n) | BigInt(number[8])
+      return ret(-(0xFFFFFFFFFFFFFFFFn - encoded), 9)
+    } else {
+      if ((first & 0x40) === 0) {
+        return ret(first & 0x3F, 1)
+      }
+      if ((first & 0x20) === 0) {
+        const rest = this.peek(1, number.subarray(1), 1)
+        if (rest === 0) return { value: 0, bytesRead: 0 }
+        const encoded = ((first & 0x1F) << 8) | number[1]
+        return ret(encoded, 2)
+      }
+      if ((first & 0x10) === 0) {
+        const rest = this.peek(1, number.subarray(1), 2)
+        if (rest < 2) return { value: 0, bytesRead: 0 }
+        const encoded = ((first & 0x0F) << 16) | (number[1] << 8) | number[2]
+        return ret(encoded, 3)
+      }
+      if ((first & 0x08) === 0) {
+        const rest = this.peek(1, number.subarray(1), 3)
+        if (rest < 3) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(first & 0x07) << 24n) | (BigInt(number[1]) << 16n) | (BigInt(number[2]) << 8n) | BigInt(number[3])
+        return ret(encoded, 4)
+      }
+      if ((first & 0x04) === 0) {
+        const rest = this.peek(1, number.subarray(1), 4)
+        if (rest < 4) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(first & 0x03) << 32n) | (BigInt(number[1]) << 24n) | (BigInt(number[2]) << 16n) | (BigInt(number[3]) << 8n) | BigInt(number[4])
+        return ret(encoded, 5)
+      }
+      if ((first & 0x02) === 0) {
+        const rest = this.peek(1, number.subarray(1), 5)
+        if (rest < 5) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(first & 0x01) << 40n) | (BigInt(number[1]) << 32n) | (BigInt(number[2]) << 24n) | (BigInt(number[3]) << 16n) | (BigInt(number[4]) << 8n) | BigInt(number[5])
+        return ret(encoded, 6)
+      }
+      if ((first & 0x01) === 0) {
+        const rest = this.peek(1, number.subarray(1), 6)
+        if (rest < 6) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(number[1]) << 40n) | (BigInt(number[2]) << 32n) | (BigInt(number[3]) << 24n) | (BigInt(number[4]) << 16n) | (BigInt(number[5]) << 8n) | BigInt(number[6])
+        return ret(encoded, 7)
+      }
+      const rest = this.peek(1, number.subarray(1), 8)
+      if (rest < 8) return { value: 0, bytesRead: 0 }
+      const encoded = (BigInt(number[1]) << 56n) | (BigInt(number[2]) << 48n) | (BigInt(number[3]) << 40n) | (BigInt(number[4]) << 32n) | (BigInt(number[5]) << 24n) | (BigInt(number[6]) << 16n) | (BigInt(number[7]) << 8n) | BigInt(number[8])
+      return ret(encoded, 9)
     }
-    // 64 bit signed number encoded in 9 bytes
-    const secondRead = this.peek(1, number.subarray(1), 8)
-    if (secondRead === 0) return { value: 0, bytesRead: 0 }
-    const rawBig = (BigInt(number[1]) << 56n)
-      | (BigInt(number[2]) << 48n)
-      | (BigInt(number[3]) << 40n)
-      | (BigInt(number[4]) << 32n)
-      | (BigInt(number[5]) << 24n)
-      | (BigInt(number[6]) << 16n)
-      | (BigInt(number[7]) << 8n)
-      | BigInt(number[8])
-    const mask = BigInt('0x7FFFFFFFFFFFFFFF')
-    const valueBig = negative ? -(((~rawBig) & mask)) : rawBig
-    this.skipRead(9)
-    if (valueBig >= BigInt(Number.MIN_SAFE_INTEGER) && valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
-      return { value: Number(valueBig), bytesRead: 9 }
-    }
-    return { value: valueBig, bytesRead: 9 }
   }
 
   /**
-   * Poke signed varint
-   * @param offset Offset from write position
-   * @param value Value to write
-   * @returns Number of bytes written
+   * Poke signed varint (same encoding as C++ circular_buffer_poke_svarint).
+   * Negative: prefix 01 (1B), 001 (2B), ... Positive: prefix 10 (1B), 110 (2B), ...
    */
   pokeSVarInt(offset: number, value: number | bigint): number {
     const valueBig = typeof value === 'number' ? BigInt(value) : value
@@ -674,107 +660,51 @@ export class MemoryCircularBuffer implements CircularBuffer {
     const bytes = new Uint8Array(9)
     let bytesWritten = 0
 
-    if (unsignedValue < 0x40n) {
-      // 6 bit signed number encoded in 1 byte
-      const byte = negative
-        ? Number((~unsignedValue) & 0x3Fn)
-        : Number(0x80n | unsignedValue)
-      bytes[0] = byte
-      bytesWritten = 1
-    } else if (unsignedValue < 0x2000n) {
-      // 13 bit signed number encoded in 2 bytes
-      if (negative) {
-        bytes[0] = Number(0x40n | (((~unsignedValue) >> 8n) & 0x1Fn))
+    if (negative) {
+      if (unsignedValue < 0x40n) {
+        bytes[0] = Number(0x40n | ((~unsignedValue) & 0x3Fn))
+        bytesWritten = 1
+      } else if (unsignedValue < 0x2000n) {
+        bytes[0] = Number(0x20n | (((~unsignedValue) >> 8n) & 0x1Fn))
         bytes[1] = Number((~unsignedValue) & 0xFFn)
-      } else {
-        bytes[0] = Number(0xC0n | (unsignedValue >> 8n))
-        bytes[1] = Number(unsignedValue & 0xFFn)
-      }
-      bytesWritten = 2
-    } else if (unsignedValue < 0x100000n) {
-      // 20 bit signed number encoded in 3 bytes
-      if (negative) {
-        bytes[0] = Number(0x60n | (((~unsignedValue) >> 16n) & 0x0Fn))
+        bytesWritten = 2
+      } else if (unsignedValue < 0x100000n) {
+        bytes[0] = Number(0x10n | (((~unsignedValue) >> 16n) & 0x0Fn))
         bytes[1] = Number(((~unsignedValue) >> 8n) & 0xFFn)
         bytes[2] = Number((~unsignedValue) & 0xFFn)
-      } else {
-        bytes[0] = Number(0xE0n | (unsignedValue >> 16n))
-        bytes[1] = Number((unsignedValue >> 8n) & 0xFFn)
-        bytes[2] = Number(unsignedValue & 0xFFn)
-      }
-      bytesWritten = 3
-    } else if (unsignedValue < 0x8000000n) {
-      // 27 bit signed number encoded in 4 bytes
-      if (negative) {
-        bytes[0] = Number(0x70n | (((~unsignedValue) >> 24n) & 0x07n))
+        bytesWritten = 3
+      } else if (unsignedValue < 0x8000000n) {
+        bytes[0] = Number(0x08n | (((~unsignedValue) >> 24n) & 0x07n))
         bytes[1] = Number(((~unsignedValue) >> 16n) & 0xFFn)
         bytes[2] = Number(((~unsignedValue) >> 8n) & 0xFFn)
         bytes[3] = Number((~unsignedValue) & 0xFFn)
-      } else {
-        bytes[0] = Number(0xF0n | (unsignedValue >> 24n))
-        bytes[1] = Number((unsignedValue >> 16n) & 0xFFn)
-        bytes[2] = Number((unsignedValue >> 8n) & 0xFFn)
-        bytes[3] = Number(unsignedValue & 0xFFn)
-      }
-      bytesWritten = 4
-    } else if (unsignedValue < 0x400000000n) {
-      // 34 bit signed number encoded in 5 bytes
-      if (negative) {
-        bytes[0] = Number(0x78n | (((~unsignedValue) >> 32n) & 0x03n))
+        bytesWritten = 4
+      } else if (unsignedValue < 0x400000000n) {
+        bytes[0] = Number(0x04n | (((~unsignedValue) >> 32n) & 0x03n))
         bytes[1] = Number(((~unsignedValue) >> 24n) & 0xFFn)
         bytes[2] = Number(((~unsignedValue) >> 16n) & 0xFFn)
         bytes[3] = Number(((~unsignedValue) >> 8n) & 0xFFn)
         bytes[4] = Number((~unsignedValue) & 0xFFn)
-      } else {
-        bytes[0] = Number(0xF8n | (unsignedValue >> 32n))
-        bytes[1] = Number((unsignedValue >> 24n) & 0xFFn)
-        bytes[2] = Number((unsignedValue >> 16n) & 0xFFn)
-        bytes[3] = Number((unsignedValue >> 8n) & 0xFFn)
-        bytes[4] = Number(unsignedValue & 0xFFn)
-      }
-      bytesWritten = 5
-    } else if (unsignedValue < 0x20000000000n) {
-      // 41 bit signed number encoded in 6 bytes
-      if (negative) {
-        bytes[0] = Number(0x7Cn | (((~unsignedValue) >> 40n) & 0x01n))
+        bytesWritten = 5
+      } else if (unsignedValue < 0x20000000000n) {
+        bytes[0] = Number(0x02n | (((~unsignedValue) >> 40n) & 0x01n))
         bytes[1] = Number(((~unsignedValue) >> 32n) & 0xFFn)
         bytes[2] = Number(((~unsignedValue) >> 24n) & 0xFFn)
         bytes[3] = Number(((~unsignedValue) >> 16n) & 0xFFn)
         bytes[4] = Number(((~unsignedValue) >> 8n) & 0xFFn)
         bytes[5] = Number((~unsignedValue) & 0xFFn)
-      } else {
-        bytes[0] = Number(0xFCn | (unsignedValue >> 40n))
-        bytes[1] = Number((unsignedValue >> 32n) & 0xFFn)
-        bytes[2] = Number((unsignedValue >> 24n) & 0xFFn)
-        bytes[3] = Number((unsignedValue >> 16n) & 0xFFn)
-        bytes[4] = Number((unsignedValue >> 8n) & 0xFFn)
-        bytes[5] = Number(unsignedValue & 0xFFn)
-      }
-      bytesWritten = 6
-    } else if (unsignedValue < 0x1000000000000n) {
-      // 48 bit signed number encoded in 7 bytes
-      if (negative) {
-        bytes[0] = 0x7E
+        bytesWritten = 6
+      } else if (unsignedValue < 0x1000000000000n) {
+        bytes[0] = 0x01
         bytes[1] = Number(((~unsignedValue) >> 40n) & 0xFFn)
         bytes[2] = Number(((~unsignedValue) >> 32n) & 0xFFn)
         bytes[3] = Number(((~unsignedValue) >> 24n) & 0xFFn)
         bytes[4] = Number(((~unsignedValue) >> 16n) & 0xFFn)
         bytes[5] = Number(((~unsignedValue) >> 8n) & 0xFFn)
         bytes[6] = Number((~unsignedValue) & 0xFFn)
+        bytesWritten = 7
       } else {
-        bytes[0] = 0xFE
-        bytes[1] = Number((unsignedValue >> 40n) & 0xFFn)
-        bytes[2] = Number((unsignedValue >> 32n) & 0xFFn)
-        bytes[3] = Number((unsignedValue >> 24n) & 0xFFn)
-        bytes[4] = Number((unsignedValue >> 16n) & 0xFFn)
-        bytes[5] = Number((unsignedValue >> 8n) & 0xFFn)
-        bytes[6] = Number(unsignedValue & 0xFFn)
-      }
-      bytesWritten = 7
-    } else {
-      // 64 bit signed number encoded in 9 bytes
-      if (negative) {
-        bytes[0] = 0x7F
+        bytes[0] = 0x00
         bytes[1] = Number(((~unsignedValue) >> 56n) & 0xFFn)
         bytes[2] = Number(((~unsignedValue) >> 48n) & 0xFFn)
         bytes[3] = Number(((~unsignedValue) >> 40n) & 0xFFn)
@@ -783,6 +713,51 @@ export class MemoryCircularBuffer implements CircularBuffer {
         bytes[6] = Number(((~unsignedValue) >> 16n) & 0xFFn)
         bytes[7] = Number(((~unsignedValue) >> 8n) & 0xFFn)
         bytes[8] = Number((~unsignedValue) & 0xFFn)
+        bytesWritten = 9
+      }
+    } else {
+      if (unsignedValue < 0x40n) {
+        bytes[0] = Number(0x80n | unsignedValue)
+        bytesWritten = 1
+      } else if (unsignedValue < 0x2000n) {
+        bytes[0] = Number(0x80n | 0x40n | (unsignedValue >> 8n))
+        bytes[1] = Number(unsignedValue & 0xFFn)
+        bytesWritten = 2
+      } else if (unsignedValue < 0x100000n) {
+        bytes[0] = Number(0x80n | 0x60n | (unsignedValue >> 16n))
+        bytes[1] = Number((unsignedValue >> 8n) & 0xFFn)
+        bytes[2] = Number(unsignedValue & 0xFFn)
+        bytesWritten = 3
+      } else if (unsignedValue < 0x8000000n) {
+        bytes[0] = Number(0x80n | 0x70n | (unsignedValue >> 24n))
+        bytes[1] = Number((unsignedValue >> 16n) & 0xFFn)
+        bytes[2] = Number((unsignedValue >> 8n) & 0xFFn)
+        bytes[3] = Number(unsignedValue & 0xFFn)
+        bytesWritten = 4
+      } else if (unsignedValue < 0x400000000n) {
+        bytes[0] = Number(0x80n | 0x78n | (unsignedValue >> 32n))
+        bytes[1] = Number((unsignedValue >> 24n) & 0xFFn)
+        bytes[2] = Number((unsignedValue >> 16n) & 0xFFn)
+        bytes[3] = Number((unsignedValue >> 8n) & 0xFFn)
+        bytes[4] = Number(unsignedValue & 0xFFn)
+        bytesWritten = 5
+      } else if (unsignedValue < 0x20000000000n) {
+        bytes[0] = Number(0x80n | 0x7Cn | (unsignedValue >> 40n))
+        bytes[1] = Number((unsignedValue >> 32n) & 0xFFn)
+        bytes[2] = Number((unsignedValue >> 24n) & 0xFFn)
+        bytes[3] = Number((unsignedValue >> 16n) & 0xFFn)
+        bytes[4] = Number((unsignedValue >> 8n) & 0xFFn)
+        bytes[5] = Number(unsignedValue & 0xFFn)
+        bytesWritten = 6
+      } else if (unsignedValue < 0x1000000000000n) {
+        bytes[0] = 0xFE
+        bytes[1] = Number((unsignedValue >> 40n) & 0xFFn)
+        bytes[2] = Number((unsignedValue >> 32n) & 0xFFn)
+        bytes[3] = Number((unsignedValue >> 24n) & 0xFFn)
+        bytes[4] = Number((unsignedValue >> 16n) & 0xFFn)
+        bytes[5] = Number((unsignedValue >> 8n) & 0xFFn)
+        bytes[6] = Number(unsignedValue & 0xFFn)
+        bytesWritten = 7
       } else {
         bytes[0] = 0xFF
         bytes[1] = Number((unsignedValue >> 56n) & 0xFFn)
@@ -793,8 +768,8 @@ export class MemoryCircularBuffer implements CircularBuffer {
         bytes[6] = Number((unsignedValue >> 16n) & 0xFFn)
         bytes[7] = Number((unsignedValue >> 8n) & 0xFFn)
         bytes[8] = Number(unsignedValue & 0xFFn)
+        bytesWritten = 9
       }
-      bytesWritten = 9
     }
 
     const written = this.poke(offset, bytes.subarray(0, bytesWritten), bytesWritten)

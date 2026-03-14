@@ -37,8 +37,15 @@ export class CircularBufferReader {
   }
 
   readF64(): number {
-    const bits = this.readLittleEndianUint64()
-    let value = bits
+    // C++ writes float64 as big-endian 8 bytes after transform; decode matches circular_buffer_reader.
+    const bytes = new Uint8Array(8)
+    const read = this.buffer.read(bytes, 8)
+    if (read !== 8) {
+      throw new Error('Unexpected end of buffer while reading float64')
+    }
+    let value = (BigInt(bytes[0]) << 56n) | (BigInt(bytes[1]) << 48n) | (BigInt(bytes[2]) << 40n) |
+      (BigInt(bytes[3]) << 32n) | (BigInt(bytes[4]) << 24n) | (BigInt(bytes[5]) << 16n) |
+      (BigInt(bytes[6]) << 8n) | BigInt(bytes[7])
     const signMask = 0x8000000000000000n
     if ((value & signMask) !== 0n) {
       value ^= signMask
