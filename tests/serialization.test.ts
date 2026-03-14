@@ -7,6 +7,8 @@ import {
   LocalCircularBuffer,
   CircularBufferReader,
   LocalCircularBufferWriter,
+  Reader,
+  Writer,
   CodecRegistry,
 } from '../src/index.js'
 
@@ -106,6 +108,59 @@ describe('serialization reference (C++ TSV)', () => {
       buffer.peek(0, dest, writer.offset)
       const actualHex = bytesToHex(dest)
       expect(actualHex).to.equal(hex.toLowerCase())
+    }
+  })
+})
+
+describe('Reader and Writer (serialization reference)', () => {
+  let rows: Array<{ type: RowType; valueStr: string; hex: string }>
+
+  before(async () => {
+    const path = join(__dirname, 'serialization_reference.tsv')
+    const content = await readFile(path, 'utf-8')
+    rows = content
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [type, valueStr, hex] = line.split('\t')
+        return { type: type as RowType, valueStr: valueStr!, hex: hex! }
+      })
+  })
+
+  it('Reader deserializes each reference row to the expected value', () => {
+    const codecs = new CodecRegistry()
+    for (const { type, valueStr, hex } of rows) {
+      const bytes = hexToBytes(hex)
+      const reader = new Reader(bytes, codecs)
+      let actual: number | bigint
+      if (type === 'u64') {
+        actual = reader.readU64()
+      } else if (type === 'i64') {
+        actual = reader.readI64()
+      } else {
+        actual = reader.readF64()
+      }
+      const expected = parseExpectedValue(type, valueStr)
+      expect(valuesEqual(type, expected, actual), `type=${type} valueStr=${valueStr}`).to.be.true
+    }
+  })
+
+  it('Writer serializes each reference value to the expected hex', () => {
+    const codecs = new CodecRegistry()
+    for (const { type, valueStr, hex } of rows) {
+      const expected = parseExpectedValue(type, valueStr)
+      const writer = new Writer(codecs, 64)
+      if (type === 'u64') {
+        writer.writeU64(expected as bigint)
+      } else if (type === 'i64') {
+        writer.writeI64(expected as bigint)
+      } else {
+        writer.writeF64(expected as number)
+      }
+      const buf = writer.toArrayBuffer()
+      const actualHex = bytesToHex(new Uint8Array(buf))
+      expect(actualHex, `type=${type} valueStr=${valueStr}`).to.equal(hex.toLowerCase())
     }
   })
 })

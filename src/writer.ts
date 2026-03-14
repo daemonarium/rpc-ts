@@ -44,11 +44,12 @@ export class Writer {
     let bits = this.scratchView.getBigUint64(0, true)
     const signMask = 0x8000000000000000n
     if ((bits & signMask) !== 0n) {
-      bits ^= signMask
-    } else {
       bits = (~bits) & 0xFFFFFFFFFFFFFFFFn
+    } else {
+      bits ^= signMask
     }
-    this.writeLittleEndianUint64(bits)
+    if (value === 0) bits = 0x8000000000000000n
+    this.writeBigEndianUint64(bits)
   }
 
   writeBool(value: boolean): void {
@@ -122,6 +123,13 @@ export class Writer {
     for (let i = 0; i < 8; ++i) {
       const byte = Number((value >> BigInt(i * 8)) & 0xFFn)
       this.writeByte(byte)
+    }
+  }
+
+  private writeBigEndianUint64(value: bigint): void {
+    this.ensureCapacity(8)
+    for (let i = 7; i >= 0; --i) {
+      this.writeByte(Number((value >> BigInt(i * 8)) & 0xFFn))
     }
   }
 
@@ -224,125 +232,57 @@ export class Writer {
   private writeSVarInt(value: bigint): void {
     const negative = value < 0n
     const unsignedValue = negative ? -value : value
-    if (unsignedValue < 0x40n) {
-      const byte = negative
-        ? Number((~unsignedValue) & 0x3Fn)
-        : Number(0x80n | unsignedValue)
-      this.writeByte(byte)
-    } else if (unsignedValue < 0x2000n) {
-      if (negative) {
-        const high = Number(0x40n | (((~unsignedValue) >> 8n) & 0x1Fn))
-        const low = Number((~unsignedValue) & 0xFFn)
-        this.writeBytes([high, low])
-      } else {
-        const high = Number(0xC0n | (unsignedValue >> 8n))
-        const low = Number(unsignedValue & 0xFFn)
-        this.writeBytes([high, low])
-      }
-    } else if (unsignedValue < 0x100000n) {
-      if (negative) {
-        const bytes = [
-          Number(0x60n | (((~unsignedValue) >> 16n) & 0x0Fn)),
+    if (negative) {
+      if (unsignedValue < 0x40n) {
+        this.writeByte(Number(0x40n | ((~unsignedValue) & 0x3Fn)))
+      } else if (unsignedValue < 0x2000n) {
+        this.writeBytes([
+          Number(0x20n | (((~unsignedValue) >> 8n) & 0x1Fn)),
+          Number((~unsignedValue) & 0xFFn)
+        ])
+      } else if (unsignedValue < 0x100000n) {
+        this.writeBytes([
+          Number(0x10n | (((~unsignedValue) >> 16n) & 0x0Fn)),
           Number(((~unsignedValue) >> 8n) & 0xFFn),
           Number((~unsignedValue) & 0xFFn)
-        ]
-        this.writeBytes(bytes)
-      } else {
-        const bytes = [
-          Number(0xE0n | (unsignedValue >> 16n)),
-          Number((unsignedValue >> 8n) & 0xFFn),
-          Number(unsignedValue & 0xFFn)
-        ]
-        this.writeBytes(bytes)
-      }
-    } else if (unsignedValue < 0x8000000n) {
-      if (negative) {
-        const bytes = [
-          Number(0x70n | (((~unsignedValue) >> 24n) & 0x07n)),
+        ])
+      } else if (unsignedValue < 0x8000000n) {
+        this.writeBytes([
+          Number(0x08n | (((~unsignedValue) >> 24n) & 0x07n)),
           Number(((~unsignedValue) >> 16n) & 0xFFn),
           Number(((~unsignedValue) >> 8n) & 0xFFn),
           Number((~unsignedValue) & 0xFFn)
-        ]
-        this.writeBytes(bytes)
-      } else {
-        const bytes = [
-          Number(0xF0n | (unsignedValue >> 24n)),
-          Number((unsignedValue >> 16n) & 0xFFn),
-          Number((unsignedValue >> 8n) & 0xFFn),
-          Number(unsignedValue & 0xFFn)
-        ]
-        this.writeBytes(bytes)
-      }
-    } else if (unsignedValue < 0x400000000n) {
-      if (negative) {
-        const bytes = [
-          Number(0x78n | (((~unsignedValue) >> 32n) & 0x03n)),
+        ])
+      } else if (unsignedValue < 0x400000000n) {
+        this.writeBytes([
+          Number(0x04n | (((~unsignedValue) >> 32n) & 0x03n)),
           Number(((~unsignedValue) >> 24n) & 0xFFn),
           Number(((~unsignedValue) >> 16n) & 0xFFn),
           Number(((~unsignedValue) >> 8n) & 0xFFn),
           Number((~unsignedValue) & 0xFFn)
-        ]
-        this.writeBytes(bytes)
-      } else {
-        const bytes = [
-          Number(0xF8n | (unsignedValue >> 32n)),
-          Number((unsignedValue >> 24n) & 0xFFn),
-          Number((unsignedValue >> 16n) & 0xFFn),
-          Number((unsignedValue >> 8n) & 0xFFn),
-          Number(unsignedValue & 0xFFn)
-        ]
-        this.writeBytes(bytes)
-      }
-    } else if (unsignedValue < 0x20000000000n) {
-      if (negative) {
-        const bytes = [
-          Number(0x7Cn | (((~unsignedValue) >> 40n) & 0x01n)),
+        ])
+      } else if (unsignedValue < 0x20000000000n) {
+        this.writeBytes([
+          Number(0x02n | (((~unsignedValue) >> 40n) & 0x01n)),
           Number(((~unsignedValue) >> 32n) & 0xFFn),
           Number(((~unsignedValue) >> 24n) & 0xFFn),
           Number(((~unsignedValue) >> 16n) & 0xFFn),
           Number(((~unsignedValue) >> 8n) & 0xFFn),
           Number((~unsignedValue) & 0xFFn)
-        ]
-        this.writeBytes(bytes)
-      } else {
-        const bytes = [
-          Number(0xFCn | (unsignedValue >> 40n)),
-          Number((unsignedValue >> 32n) & 0xFFn),
-          Number((unsignedValue >> 24n) & 0xFFn),
-          Number((unsignedValue >> 16n) & 0xFFn),
-          Number((unsignedValue >> 8n) & 0xFFn),
-          Number(unsignedValue & 0xFFn)
-        ]
-        this.writeBytes(bytes)
-      }
-    } else if (unsignedValue < 0x1000000000000n) {
-      if (negative) {
-        const bytes = [
-          0x7E,
+        ])
+      } else if (unsignedValue < 0x1000000000000n) {
+        this.writeBytes([
+          0x01,
           Number(((~unsignedValue) >> 40n) & 0xFFn),
           Number(((~unsignedValue) >> 32n) & 0xFFn),
           Number(((~unsignedValue) >> 24n) & 0xFFn),
           Number(((~unsignedValue) >> 16n) & 0xFFn),
           Number(((~unsignedValue) >> 8n) & 0xFFn),
           Number((~unsignedValue) & 0xFFn)
-        ]
-        this.writeBytes(bytes)
+        ])
       } else {
-        const bytes = [
-          0xFE,
-          Number((unsignedValue >> 40n) & 0xFFn),
-          Number((unsignedValue >> 32n) & 0xFFn),
-          Number((unsignedValue >> 24n) & 0xFFn),
-          Number((unsignedValue >> 16n) & 0xFFn),
-          Number((unsignedValue >> 8n) & 0xFFn),
-          Number(unsignedValue & 0xFFn)
-        ]
-        this.writeBytes(bytes)
-      }
-    } else {
-      if (negative) {
-        const bytes = [
-          0x7F,
+        this.writeBytes([
+          0x00,
           Number(((~unsignedValue) >> 56n) & 0xFFn),
           Number(((~unsignedValue) >> 48n) & 0xFFn),
           Number(((~unsignedValue) >> 40n) & 0xFFn),
@@ -351,10 +291,58 @@ export class Writer {
           Number(((~unsignedValue) >> 16n) & 0xFFn),
           Number(((~unsignedValue) >> 8n) & 0xFFn),
           Number((~unsignedValue) & 0xFFn)
-        ]
-        this.writeBytes(bytes)
+        ])
+      }
+    } else {
+      if (unsignedValue < 0x40n) {
+        this.writeByte(Number(0x80n | unsignedValue))
+      } else if (unsignedValue < 0x2000n) {
+        this.writeBytes([
+          Number(0xC0n | (unsignedValue >> 8n)),
+          Number(unsignedValue & 0xFFn)
+        ])
+      } else if (unsignedValue < 0x100000n) {
+        this.writeBytes([
+          Number(0xE0n | (unsignedValue >> 16n)),
+          Number((unsignedValue >> 8n) & 0xFFn),
+          Number(unsignedValue & 0xFFn)
+        ])
+      } else if (unsignedValue < 0x8000000n) {
+        this.writeBytes([
+          Number(0xF0n | (unsignedValue >> 24n)),
+          Number((unsignedValue >> 16n) & 0xFFn),
+          Number((unsignedValue >> 8n) & 0xFFn),
+          Number(unsignedValue & 0xFFn)
+        ])
+      } else if (unsignedValue < 0x400000000n) {
+        this.writeBytes([
+          Number(0xF8n | (unsignedValue >> 32n)),
+          Number((unsignedValue >> 24n) & 0xFFn),
+          Number((unsignedValue >> 16n) & 0xFFn),
+          Number((unsignedValue >> 8n) & 0xFFn),
+          Number(unsignedValue & 0xFFn)
+        ])
+      } else if (unsignedValue < 0x20000000000n) {
+        this.writeBytes([
+          Number(0xFCn | (unsignedValue >> 40n)),
+          Number((unsignedValue >> 32n) & 0xFFn),
+          Number((unsignedValue >> 24n) & 0xFFn),
+          Number((unsignedValue >> 16n) & 0xFFn),
+          Number((unsignedValue >> 8n) & 0xFFn),
+          Number(unsignedValue & 0xFFn)
+        ])
+      } else if (unsignedValue < 0x1000000000000n) {
+        this.writeBytes([
+          0xFE,
+          Number((unsignedValue >> 40n) & 0xFFn),
+          Number((unsignedValue >> 32n) & 0xFFn),
+          Number((unsignedValue >> 24n) & 0xFFn),
+          Number((unsignedValue >> 16n) & 0xFFn),
+          Number((unsignedValue >> 8n) & 0xFFn),
+          Number(unsignedValue & 0xFFn)
+        ])
       } else {
-        const bytes = [
+        this.writeBytes([
           0xFF,
           Number((unsignedValue >> 56n) & 0xFFn),
           Number((unsignedValue >> 48n) & 0xFFn),
@@ -364,8 +352,7 @@ export class Writer {
           Number((unsignedValue >> 16n) & 0xFFn),
           Number((unsignedValue >> 8n) & 0xFFn),
           Number(unsignedValue & 0xFFn)
-        ]
-        this.writeBytes(bytes)
+        ])
       }
     }
   }
