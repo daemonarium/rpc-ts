@@ -7,7 +7,6 @@
  */
 
 import type { Socket } from './Socket.js'
-import type { CircularBuffer } from './CircularBuffer.js'
 import { CircularBufferReader } from './CircularBufferReader.js'
 import { CircularBufferWriter } from './CircularBufferWriter.js'
 import { CodecRegistry } from './codec.js'
@@ -28,7 +27,7 @@ interface DispatchEntry {
 }
 
 export class SocketMessageChannel {
-  private readonly socket: SocketMessageChannelSocket
+  readonly socket: SocketMessageChannelSocket
   private readonly reader: CircularBufferReader
   private readonly writer: CircularBufferWriter
   private readonly codecs: CodecRegistry
@@ -135,7 +134,7 @@ export class SocketMessageChannel {
         return
       }
       this.socket.skipRead(LENGTH_SIZE)
-      const messageStart = input.getReadOffset()
+      this.reader.setReadOffset(0)
       const typeIndex = Number(this.reader.readU64())
       if (typeIndex >= this.dispatchTable.length) {
         input.skipRead(msgLen)
@@ -149,8 +148,7 @@ export class SocketMessageChannel {
       let msg: unknown
       entry.codec.deserialize(this.reader as any, (v: unknown) => { msg = v })
       this.reader.readRest()
-      const consumed = input.getReadOffset() - messageStart
-      const payloadSize = msgLen - consumed
+      const payloadSize = msgLen - this.reader.getReadOffset()
       if (entry.handler) {
         let result: unknown
         if (entry.handler.length >= 2) {
@@ -162,10 +160,7 @@ export class SocketMessageChannel {
           await (result as Promise<unknown>)
         }
       }
-      const remaining = msgLen - (input.getReadOffset() - messageStart)
-      if (remaining > 0) {
-        input.skipRead(remaining)
-      }
+      input.skipRead(msgLen)
       if (input.readableBytes() === 0) {
         this.socket.drain()
         return

@@ -10,11 +10,20 @@ export class CircularBufferReader {
   private readonly pendingPointers: Array<{ assignments: AssignAfterRead[], readLater: ReadLater }> = []
   private readonly scratch = new ArrayBuffer(8)
   private readonly scratchView = new DataView(this.scratch)
+  private readOffset = 0
 
   constructor(
     private readonly buffer: CircularBuffer,
     private readonly codecs: CodecRegistry
   ) {}
+
+  getReadOffset(): number {
+    return this.readOffset
+  }
+
+  setReadOffset(offset: number): void {
+    this.readOffset = offset
+  }
 
   isIndexed(): boolean {
     return false
@@ -39,10 +48,11 @@ export class CircularBufferReader {
   readF64(): number {
     // C++ writes float64 as big-endian 8 bytes after transform; decode matches circular_buffer_reader.
     const bytes = new Uint8Array(8)
-    const read = this.buffer.read(bytes, 8)
+    const read = this.buffer.peek(this.readOffset, bytes, 8)
     if (read !== 8) {
       throw new Error('Unexpected end of buffer while reading float64')
     }
+    this.readOffset += 8
     let value = (BigInt(bytes[0]) << 56n) | (BigInt(bytes[1]) << 48n) | (BigInt(bytes[2]) << 40n) |
       (BigInt(bytes[3]) << 32n) | (BigInt(bytes[4]) << 24n) | (BigInt(bytes[5]) << 16n) |
       (BigInt(bytes[6]) << 8n) | BigInt(bytes[7])
@@ -58,10 +68,11 @@ export class CircularBufferReader {
 
   readBool(): boolean {
     const bytes = new Uint8Array(1)
-    const read = this.buffer.read(bytes, 1)
+    const read = this.buffer.peek(this.readOffset, bytes, 1)
     if (read !== 1) {
       throw new Error('Unexpected end of buffer while reading bool')
     }
+    this.readOffset += 1
     return bytes[0] !== 0
   }
 
@@ -134,10 +145,11 @@ export class CircularBufferReader {
 
   private readLittleEndianUint64(): bigint {
     const bytes = new Uint8Array(8)
-    const read = this.buffer.read(bytes, 8)
+    const read = this.buffer.peek(this.readOffset, bytes, 8)
     if (read !== 8) {
       throw new Error('Unexpected end of buffer while reading uint64')
     }
+    this.readOffset += 8
     let value = 0n
     for (let i = 0; i < 8; ++i) {
       value |= BigInt(bytes[i]) << BigInt(i * 8)
@@ -146,12 +158,20 @@ export class CircularBufferReader {
   }
 
   private readUVarInt(): number | bigint {
-    const result = this.buffer.readUVarInt()
+    const result = this.buffer.peekUVarInt(this.readOffset)
+    if (result.bytesRead === 0) {
+      throw new Error('Unexpected end of buffer while reading uvarint')
+    }
+    this.readOffset += result.bytesRead
     return result.value
   }
 
   private readSVarInt(): number | bigint {
-    const result = this.buffer.readSVarInt()
+    const result = this.buffer.peekSVarInt(this.readOffset)
+    if (result.bytesRead === 0) {
+      throw new Error('Unexpected end of buffer while reading svarint')
+    }
+    this.readOffset += result.bytesRead
     return result.value
   }
 
@@ -160,10 +180,11 @@ export class CircularBufferReader {
       throw new Error('Length cannot be negative')
     }
     const bytes = new Uint8Array(length)
-    const read = this.buffer.read(bytes, length)
+    const read = this.buffer.peek(this.readOffset, bytes, length)
     if (read !== length) {
       throw new Error('Unexpected end of buffer while reading bytes')
     }
+    this.readOffset += length
     return bytes
   }
 }

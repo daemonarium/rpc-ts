@@ -115,6 +115,20 @@ export interface CircularBuffer {
   readSVarInt(): { value: number | bigint, bytesRead: number }
 
   /**
+   * Peek unsigned varint at offset from read position (does not advance buffer).
+   * @param offset Offset from current read position
+   * @returns Value and number of bytes the varint occupies
+   */
+  peekUVarInt(offset: number): { value: number | bigint, bytesRead: number }
+
+  /**
+   * Peek signed varint at offset from read position (does not advance buffer).
+   * @param offset Offset from current read position
+   * @returns Value and number of bytes the varint occupies
+   */
+  peekSVarInt(offset: number): { value: number | bigint, bytesRead: number }
+
+  /**
    * Write signed varint
    * @param value Value to write
    * @returns Number of bytes written

@@ -431,6 +431,109 @@ export class MemoryCircularBuffer implements CircularBuffer {
   }
 
   /**
+   * Peek unsigned varint at offset from read position (does not advance buffer).
+   */
+  peekUVarInt(offset: number): { value: number | bigint, bytesRead: number } {
+    const number = new Uint8Array(9)
+    const firstRead = this.peek(offset, number, 1)
+    if (firstRead === 0) return { value: 0, bytesRead: 0 }
+
+    const first = number[0]
+    if ((first & 0x80) === 0) {
+      return { value: first, bytesRead: 1 }
+    }
+    if ((first & 0x40) === 0) {
+      const secondRead = this.peek(offset + 1, number.subarray(1), 1)
+      if (secondRead === 0) return { value: 0, bytesRead: 0 }
+      const value = ((first & 0x3F) << 8) | number[1]
+      return { value, bytesRead: 2 }
+    }
+    if ((first & 0x20) === 0) {
+      const secondRead = this.peek(offset + 1, number.subarray(1), 2)
+      if (secondRead === 0) return { value: 0, bytesRead: 0 }
+      const value = ((first & 0x1F) << 16) | (number[1] << 8) | number[2]
+      return { value, bytesRead: 3 }
+    }
+    if ((first & 0x10) === 0) {
+      const secondRead = this.peek(offset + 1, number.subarray(1), 3)
+      if (secondRead === 0) return { value: 0, bytesRead: 0 }
+      const value = ((first & 0x0F) << 24) | (number[1] << 16) | (number[2] << 8) | number[3]
+      return { value, bytesRead: 4 }
+    }
+    if ((first & 0x08) === 0) {
+      const secondRead = this.peek(offset + 1, number.subarray(1), 4)
+      if (secondRead === 0) return { value: 0, bytesRead: 0 }
+      const valueBig = (BigInt(first & 0x07) << 32n)
+        | (BigInt(number[1]) << 24n)
+        | (BigInt(number[2]) << 16n)
+        | (BigInt(number[3]) << 8n)
+        | BigInt(number[4])
+      if (valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        return { value: Number(valueBig), bytesRead: 5 }
+      }
+      return { value: valueBig, bytesRead: 5 }
+    }
+    if ((first & 0x04) === 0) {
+      const secondRead = this.peek(offset + 1, number.subarray(1), 5)
+      if (secondRead === 0) return { value: 0, bytesRead: 0 }
+      const valueBig = (BigInt(first & 0x03) << 40n)
+        | (BigInt(number[1]) << 32n)
+        | (BigInt(number[2]) << 24n)
+        | (BigInt(number[3]) << 16n)
+        | (BigInt(number[4]) << 8n)
+        | BigInt(number[5])
+      if (valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        return { value: Number(valueBig), bytesRead: 6 }
+      }
+      return { value: valueBig, bytesRead: 6 }
+    }
+    if ((first & 0x02) === 0) {
+      const secondRead = this.peek(offset + 1, number.subarray(1), 6)
+      if (secondRead === 0) return { value: 0, bytesRead: 0 }
+      const valueBig = (BigInt(first & 0x01) << 48n)
+        | (BigInt(number[1]) << 40n)
+        | (BigInt(number[2]) << 32n)
+        | (BigInt(number[3]) << 24n)
+        | (BigInt(number[4]) << 16n)
+        | (BigInt(number[5]) << 8n)
+        | BigInt(number[6])
+      if (valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        return { value: Number(valueBig), bytesRead: 7 }
+      }
+      return { value: valueBig, bytesRead: 7 }
+    }
+    if ((first & 0x01) === 0) {
+      const secondRead = this.peek(offset + 1, number.subarray(1), 7)
+      if (secondRead === 0) return { value: 0, bytesRead: 0 }
+      const valueBig = (BigInt(number[1]) << 48n)
+        | (BigInt(number[2]) << 40n)
+        | (BigInt(number[3]) << 32n)
+        | (BigInt(number[4]) << 24n)
+        | (BigInt(number[5]) << 16n)
+        | (BigInt(number[6]) << 8n)
+        | BigInt(number[7])
+      if (valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        return { value: Number(valueBig), bytesRead: 8 }
+      }
+      return { value: valueBig, bytesRead: 8 }
+    }
+    const secondRead = this.peek(offset + 1, number.subarray(1), 8)
+    if (secondRead === 0) return { value: 0, bytesRead: 0 }
+    const valueBig = (BigInt(number[1]) << 56n)
+      | (BigInt(number[2]) << 48n)
+      | (BigInt(number[3]) << 40n)
+      | (BigInt(number[4]) << 32n)
+      | (BigInt(number[5]) << 24n)
+      | (BigInt(number[6]) << 16n)
+      | (BigInt(number[7]) << 8n)
+      | BigInt(number[8])
+    if (valueBig <= BigInt(Number.MAX_SAFE_INTEGER)) {
+      return { value: Number(valueBig), bytesRead: 9 }
+    }
+    return { value: valueBig, bytesRead: 9 }
+  }
+
+  /**
    * Poke unsigned varint
    * @param offset Offset from write position
    * @param value Value to write
@@ -645,6 +748,111 @@ export class MemoryCircularBuffer implements CircularBuffer {
       if (rest < 8) return { value: 0, bytesRead: 0 }
       const encoded = (BigInt(number[1]) << 56n) | (BigInt(number[2]) << 48n) | (BigInt(number[3]) << 40n) | (BigInt(number[4]) << 32n) | (BigInt(number[5]) << 24n) | (BigInt(number[6]) << 16n) | (BigInt(number[7]) << 8n) | BigInt(number[8])
       return ret(encoded, 9)
+    }
+  }
+
+  /**
+   * Peek signed varint at offset from read position (does not advance buffer).
+   */
+  peekSVarInt(offset: number): { value: number | bigint, bytesRead: number } {
+    const number = new Uint8Array(9)
+    const firstRead = this.peek(offset, number, 1)
+    if (firstRead === 0) return { value: 0, bytesRead: 0 }
+
+    const first = number[0]
+    const negative = (first & 0x80) === 0
+
+    const retVal = (value: number | bigint, bytesRead: number) => {
+      if (typeof value === 'bigint' && value >= BigInt(Number.MIN_SAFE_INTEGER) && value <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        return { value: Number(value), bytesRead }
+      }
+      return { value, bytesRead }
+    }
+
+    if (negative) {
+      if ((first & 0x40) !== 0) return retVal(-((~first) & 0x3F), 1)
+      if ((first & 0xE0) === 0x20) {
+        const rest = this.peek(offset + 1, number.subarray(1), 1)
+        if (rest === 0) return { value: 0, bytesRead: 0 }
+        const encoded = ((first & 0x1F) << 8) | number[1]
+        return retVal(-(0x1FFF - encoded), 2)
+      }
+      if ((first & 0xF0) === 0x10) {
+        const rest = this.peek(offset + 1, number.subarray(1), 2)
+        if (rest < 2) return { value: 0, bytesRead: 0 }
+        const encoded = ((first & 0x0F) << 16) | (number[1] << 8) | number[2]
+        return retVal(-(0xFFFFFn - BigInt(encoded)), 3)
+      }
+      if ((first & 0xF8) === 0x08) {
+        const rest = this.peek(offset + 1, number.subarray(1), 3)
+        if (rest < 3) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(first & 0x07) << 24n) | (BigInt(number[1]) << 16n) | (BigInt(number[2]) << 8n) | BigInt(number[3])
+        return retVal(-(0x7FFFFFFn - encoded), 4)
+      }
+      if ((first & 0xFC) === 0x04) {
+        const rest = this.peek(offset + 1, number.subarray(1), 4)
+        if (rest < 4) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(first & 0x03) << 32n) | (BigInt(number[1]) << 24n) | (BigInt(number[2]) << 16n) | (BigInt(number[3]) << 8n) | BigInt(number[4])
+        return retVal(-(0x3FFFFFFFFn - encoded), 5)
+      }
+      if ((first & 0xFE) === 0x02) {
+        const rest = this.peek(offset + 1, number.subarray(1), 5)
+        if (rest < 5) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(first & 0x01) << 40n) | (BigInt(number[1]) << 32n) | (BigInt(number[2]) << 24n) | (BigInt(number[3]) << 16n) | (BigInt(number[4]) << 8n) | BigInt(number[5])
+        return retVal(-(0x1FFFFFFFFFFn - encoded), 6)
+      }
+      if (first === 0x01) {
+        const rest = this.peek(offset + 1, number.subarray(1), 6)
+        if (rest < 6) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(number[1]) << 40n) | (BigInt(number[2]) << 32n) | (BigInt(number[3]) << 24n) | (BigInt(number[4]) << 16n) | (BigInt(number[5]) << 8n) | BigInt(number[6])
+        return retVal(-(0xFFFFFFFFFFFFn - encoded), 7)
+      }
+      const rest = this.peek(offset + 1, number.subarray(1), 8)
+      if (rest < 8) return { value: 0, bytesRead: 0 }
+      const encoded = (BigInt(number[1]) << 56n) | (BigInt(number[2]) << 48n) | (BigInt(number[3]) << 40n) | (BigInt(number[4]) << 32n) | (BigInt(number[5]) << 24n) | (BigInt(number[6]) << 16n) | (BigInt(number[7]) << 8n) | BigInt(number[8])
+      return retVal(-(0xFFFFFFFFFFFFFFFFn - encoded), 9)
+    } else {
+      if ((first & 0x40) === 0) return retVal(first & 0x3F, 1)
+      if ((first & 0x20) === 0) {
+        const rest = this.peek(offset + 1, number.subarray(1), 1)
+        if (rest === 0) return { value: 0, bytesRead: 0 }
+        const encoded = ((first & 0x1F) << 8) | number[1]
+        return retVal(encoded, 2)
+      }
+      if ((first & 0x10) === 0) {
+        const rest = this.peek(offset + 1, number.subarray(1), 2)
+        if (rest < 2) return { value: 0, bytesRead: 0 }
+        const encoded = ((first & 0x0F) << 16) | (number[1] << 8) | number[2]
+        return retVal(encoded, 3)
+      }
+      if ((first & 0x08) === 0) {
+        const rest = this.peek(offset + 1, number.subarray(1), 3)
+        if (rest < 3) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(first & 0x07) << 24n) | (BigInt(number[1]) << 16n) | (BigInt(number[2]) << 8n) | BigInt(number[3])
+        return retVal(encoded, 4)
+      }
+      if ((first & 0x04) === 0) {
+        const rest = this.peek(offset + 1, number.subarray(1), 4)
+        if (rest < 4) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(first & 0x03) << 32n) | (BigInt(number[1]) << 24n) | (BigInt(number[2]) << 16n) | (BigInt(number[3]) << 8n) | BigInt(number[4])
+        return retVal(encoded, 5)
+      }
+      if ((first & 0x02) === 0) {
+        const rest = this.peek(offset + 1, number.subarray(1), 5)
+        if (rest < 5) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(first & 0x01) << 40n) | (BigInt(number[1]) << 32n) | (BigInt(number[2]) << 24n) | (BigInt(number[3]) << 16n) | (BigInt(number[4]) << 8n) | BigInt(number[5])
+        return retVal(encoded, 6)
+      }
+      if ((first & 0x01) === 0) {
+        const rest = this.peek(offset + 1, number.subarray(1), 6)
+        if (rest < 6) return { value: 0, bytesRead: 0 }
+        const encoded = (BigInt(number[1]) << 40n) | (BigInt(number[2]) << 32n) | (BigInt(number[3]) << 24n) | (BigInt(number[4]) << 16n) | (BigInt(number[5]) << 8n) | BigInt(number[6])
+        return retVal(encoded, 7)
+      }
+      const rest = this.peek(offset + 1, number.subarray(1), 8)
+      if (rest < 8) return { value: 0, bytesRead: 0 }
+      const encoded = (BigInt(number[1]) << 56n) | (BigInt(number[2]) << 48n) | (BigInt(number[3]) << 40n) | (BigInt(number[4]) << 32n) | (BigInt(number[5]) << 24n) | (BigInt(number[6]) << 16n) | (BigInt(number[7]) << 8n) | BigInt(number[8])
+      return retVal(encoded, 9)
     }
   }
 
