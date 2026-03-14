@@ -28,6 +28,7 @@ interface DispatchEntry {
 
 export class SocketMessageChannel {
   readonly socket: SocketMessageChannelSocket
+  private handlingData = false
   private readonly reader: CircularBufferReader
   private readonly writer: CircularBufferWriter
   private readonly codecs: CodecRegistry
@@ -114,57 +115,61 @@ export class SocketMessageChannel {
    * Process incoming data: read length-prefixed frames and dispatch to handlers.
    */
   async handleData(): Promise<void> {
-    const input = this.socket.inputBuffer
-    while (true) {
-      if (input.readableBytes() < LENGTH_SIZE) {
-        this.socket.drain()
-        return
-      }
-      const lengthBuffer = new Uint8Array(LENGTH_SIZE)
-      const peeked = this.socket.peek(0, lengthBuffer, LENGTH_SIZE)
-      if (peeked < LENGTH_SIZE) {
-        this.socket.drain()
-        return
-      }
-      const msgLen = new DataView(lengthBuffer.buffer, lengthBuffer.byteOffset, lengthBuffer.byteLength).getUint32(0, true)
-      const available = input.readableBytes()
-      if (available < LENGTH_SIZE + msgLen) {
-        this.socket.reserveForReading(msgLen + LENGTH_SIZE)
-        this.socket.drain()
-        return
-      }
-      this.socket.skipRead(LENGTH_SIZE)
-      this.reader.setReadOffset(0)
-      const typeIndex = Number(this.reader.readU64())
-      if (typeIndex >= this.dispatchTable.length) {
-        input.skipRead(msgLen)
-        throw new Error(`Unknown message type index: ${typeIndex}`)
-      }
-      const entry = this.dispatchTable[typeIndex]
-      if (!entry) {
-        input.skipRead(msgLen)
-        throw new Error(`No dispatch entry for index ${typeIndex}`)
-      }
-      let msg: unknown
-      entry.codec.deserialize(this.reader as any, (v: unknown) => { msg = v })
-      this.reader.readRest()
-      const payloadSize = msgLen - this.reader.getReadOffset()
-      if (entry.handler) {
-        let result: unknown
-        if (entry.handler.length >= 2) {
-          result = (entry.handler as (m: unknown, p: number) => void)(msg, payloadSize)
-        } else {
-          result = (entry.handler as (m: unknown) => void)(msg)
+    if (this.handlingData) return
+    this.handlingData = true
+    try {
+      const input = this.socket.inputBuffer
+      while (true) {
+        if (input.readableBytes() < LENGTH_SIZE) {
+          this.socket.drain()
+          if (input.readableBytes() < LENGTH_SIZE) return        
+        }   
+        const lengthBuffer = new Uint8Array(LENGTH_SIZE)
+        this.socket.peek(0, lengthBuffer, LENGTH_SIZE)
+        const msgLen = new DataView(lengthBuffer.buffer, lengthBuffer.byteOffset, lengthBuffer.byteLength).getUint32(0, true)
+        if (input.readableBytes() < LENGTH_SIZE + msgLen) {
+          this.socket.reserveForReading(msgLen + LENGTH_SIZE)
+          this.socket.drain()        
+          if (input.readableBytes() < LENGTH_SIZE + msgLen) return
         }
-        if (result && typeof (result as Promise<unknown>).then === 'function') {
-          await (result as Promise<unknown>)
+        this.socket.skipRead(LENGTH_SIZE)
+        this.reader.setReadOffset(0)
+        const typeIndex = Number(this.reader.readU64())
+        if (typeIndex >= this.dispatchTable.length) {
+          input.skipRead(msgLen)
+          throw new Error(`Unknown message type index: ${typeIndex}`)
+        }
+        const entry = this.dispatchTable[typeIndex]
+        if (!entry) {
+          input.skipRead(msgLen)
+          throw new Error(`No dispatch entry for index ${typeIndex}`)
+        }
+        let msg: unknown
+        entry.codec.deserialize(this.reader as any, (v: unknown) => { msg = v })
+        this.reader.readRest()
+        const payloadSize = msgLen - this.reader.getReadOffset()
+        try {
+          if (entry.handler) {
+            let result: unknown
+            if (entry.handler.length >= 2) {
+              result = (entry.handler as (m: unknown, p: number) => void)(msg, payloadSize)
+            } else {
+              result = (entry.handler as (m: unknown) => void)(msg)
+            }
+            if (result && typeof (result as Promise<unknown>).then === 'function') {
+              await (result as Promise<unknown>)
+            }
+          }
+        } finally {
+          input.skipRead(msgLen)
+          if (input.readableBytes() === 0) {
+            this.socket.drain()          
+            if (input.readableBytes() === 0) return
+          }
         }
       }
-      input.skipRead(msgLen)
-      if (input.readableBytes() === 0) {
-        this.socket.drain()
-        return
-      }
+    } finally {
+      this.handlingData = false
     }
   }
 

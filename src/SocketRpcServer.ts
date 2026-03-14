@@ -33,8 +33,6 @@ export class SocketRpcServer {
   private readonly messageChannel: SocketMessageChannel
   private readonly rawRpcServer: RawRpcServer
   private currentRequestId = 0
-  private processing = false
-  private pendingData = false
 
   constructor(socket: SocketMessageChannelSocket, typeRegistry: TypeRegistry, codecs: CodecRegistry) {
     ensureRpcTypesInRegistry(typeRegistry)
@@ -86,42 +84,20 @@ export class SocketRpcServer {
     )
 
     socket.setOptions?.({
-      dataEventCallback: () => {
-        if (this.processing) {
-          this.pendingData = true
-          return
+      dataEventCallback: async () => {
+        try {
+          await this.messageChannel.handleData()
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            (error.message.includes('end of buffer') || error.message.includes('Unexpected end'))
+          ) {
+            return
+          }
+          throw error
         }
-        this.processRequests()
       }
     })
-  }
-
-  private async processRequests(): Promise<void> {
-    this.processing = true
-    try {
-      this.pendingData = false
-      try {
-        await this.messageChannel.handleData()
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          (error.message.includes('end of buffer') || error.message.includes('Unexpected end'))
-        ) {
-          return
-        }
-        throw error
-      }
-    } finally {
-      this.processing = false
-      if (this.pendingData) {
-        this.pendingData = false
-        this.processRequests()
-      }
-    }
-  }
-
-  async handleRequests(): Promise<void> {
-    await this.processRequests()
   }
 
   registerMessageType(typeName: string): void {
