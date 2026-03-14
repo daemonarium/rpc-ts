@@ -1,41 +1,92 @@
 import type { TypeRegistry } from './typeDescription.js'
 import { RawRpcServer } from './RawRpcServer.js'
-import { LocalSocket } from './LocalSocket.js'
-import { CircularBufferReader } from './CircularBufferReader.js'
-import { LocalCircularBufferWriter } from './LocalCircularBufferWriter.js'
 import { CodecRegistry } from './codec.js'
+import { SocketMessageChannel, type SocketMessageChannelSocket } from './SocketMessageChannel.js'
+import { ensureRpcTypesInRegistry, ensureRpcCodecs, RPC_REQUEST_TYPE, RPC_RESPONSE_TYPE, RPC_ERROR_TYPE } from './rpc.js'
+import type { Writer } from './writer.js'
+
+/**
+ * Writer adapter that skips the first writeU64 and writeBool (rpc_response header already sent via channel).
+ */
+function createResponseWriterAdapter(getWriter: () => Writer): Writer {
+  let skip = 2
+  return new Proxy({} as Writer, {
+    get(_, prop) {
+      const w = getWriter()
+      const val = (w as any)[prop]
+      if (typeof val !== 'function') return val
+      if (prop === 'writeU64' || prop === 'writeBool') {
+        return (...args: any[]) => {
+          if (skip > 0) {
+            skip--
+            return
+          }
+          return (val as (...a: any[]) => any).apply(w, args)
+        }
+      }
+      return (...args: any[]) => (val as (...a: any[]) => any).apply(w, args)
+    }
+  })
+}
 
 export class SocketRpcServer {
+  private readonly messageChannel: SocketMessageChannel
   private readonly rawRpcServer: RawRpcServer
-  private readonly reader: CircularBufferReader
-  private readonly writer: LocalCircularBufferWriter
-  private readonly socket: LocalSocket
+  private currentRequestId = 0
   private processing = false
   private pendingData = false
 
-  constructor(socket: LocalSocket, typeRegistry: TypeRegistry, codecs: CodecRegistry) {
-    this.socket = socket
-    // Server reads requests from inputBuffer (data coming in)
-    this.reader = new CircularBufferReader(socket.inputBuffer, codecs)
-    // Server writes responses to outputBuffer (data going out)
-    this.writer = new LocalCircularBufferWriter(socket.outputBuffer, codecs)
-    const beforeSend = () => {
-      socket.poke(0, new Uint8Array(4), 4)
-      this.writer.offset = 4
-    }
+  constructor(socket: SocketMessageChannelSocket, typeRegistry: TypeRegistry, codecs: CodecRegistry) {
+    ensureRpcTypesInRegistry(typeRegistry)
+    ensureRpcCodecs(codecs, typeRegistry)
+    this.messageChannel = new SocketMessageChannel(socket, codecs)
+    this.messageChannel.registerMessageType(RPC_REQUEST_TYPE)
+    this.messageChannel.registerMessageType(RPC_RESPONSE_TYPE)
+    this.messageChannel.registerMessageType(RPC_ERROR_TYPE)
 
+    const beforeSend = () => {
+      this.messageChannel.beginSend(RPC_RESPONSE_TYPE, {
+        request_id: this.currentRequestId,
+        success: true
+      })
+    }
     const sender = () => {
-      // write the request length as uint32_t
-      const requestLength = new Uint32Array([this.writer.offset - 4])
-      socket.poke(0, new Uint8Array(requestLength.buffer), 4)
-      socket.commitWrite(this.writer.offset)
-      // Flush the socket to send data
-      socket.flush()
+      this.messageChannel.commitSend()
     }
     this.rawRpcServer = new RawRpcServer(typeRegistry, beforeSend, sender)
-    // Set up data event handler to process incoming requests
-    socket.setOptions({
-      dataEventCallback: (dataSize: number) => {
+
+    this.messageChannel.onMessage(
+      RPC_REQUEST_TYPE,
+      async (msg: { request_id: number; function_id: number }, _payloadSize: number) => {
+        this.currentRequestId = msg.request_id
+        if (!this.rawRpcServer.hasHandler(msg.function_id)) {
+          this.messageChannel.sendMessage(RPC_ERROR_TYPE, {
+            request_id: msg.request_id,
+            success: false,
+            error: 'Function not found'
+          })
+          return
+        }
+        const writer = createResponseWriterAdapter(() => this.messageChannel.getWriter() as any)
+        try {
+          await this.rawRpcServer.handleCallWithIds(
+            msg.request_id,
+            msg.function_id,
+            this.messageChannel.getReader() as any,
+            writer
+          )
+        } catch (error) {
+          this.messageChannel.sendMessage(RPC_ERROR_TYPE, {
+            request_id: msg.request_id,
+            success: false,
+            error: error instanceof Error ? error.message : String(error)
+          })
+        }
+      }
+    )
+
+    socket.setOptions?.({
+      dataEventCallback: () => {
         if (this.processing) {
           this.pendingData = true
           return
@@ -45,73 +96,23 @@ export class SocketRpcServer {
     })
   }
 
-  /**
-   * Process incoming requests from the socket
-   */
   private async processRequests(): Promise<void> {
     this.processing = true
-    const LENGTH_SIZE = 4
-
     try {
-      while (true) {
-        this.pendingData = false
-
-        // Check if we have enough data for the length prefix
-        if (this.socket.inputBuffer.readableBytes() < LENGTH_SIZE) {
-          this.socket.drain()
-          if (this.socket.inputBuffer.readableBytes() < LENGTH_SIZE) {
-            return
-          }
-        }
-
-        // Peek at the length
-        const lengthBuffer = new Uint8Array(LENGTH_SIZE)
-        const bytesPeeked = this.socket.peek(0, lengthBuffer, LENGTH_SIZE)
-        if (bytesPeeked < LENGTH_SIZE) {
+      this.pendingData = false
+      try {
+        await this.messageChannel.handleData()
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          (error.message.includes('end of buffer') || error.message.includes('Unexpected end'))
+        ) {
           return
         }
-
-        // Convert to uint32 (little-endian, matching C++)
-        const dataView = new DataView(lengthBuffer.buffer, lengthBuffer.byteOffset, lengthBuffer.byteLength)
-        const messageLength = dataView.getUint32(0, true)
-        // Check if we have enough data for the full message
-        let available = this.socket.inputBuffer.readableBytes()
-        if (available < LENGTH_SIZE + messageLength) {           
-          this.socket.reserveForReading(messageLength + LENGTH_SIZE)
-          this.socket.drain()
-          available = this.socket.inputBuffer.readableBytes()
-          if (available < LENGTH_SIZE + messageLength) {
-            return // still not enough after drain
-          }
-        }
-
-        // Consume length prefix
-        this.socket.skipRead(LENGTH_SIZE)
-
-        try {
-          // Handle the RPC call
-          await this.rawRpcServer.handleCall(this.reader as any, this.writer as any)
-
-          // Flush the response
-          this.socket.flush()
-        } catch (error) {
-          if (error instanceof Error && (error.message.includes('end of buffer') || error.message.includes('Unexpected end'))) {
-            break
-          }
-          throw error
-        }
-
-        // Check for pending data from reentrant calls or continue loop
-        if (this.socket.inputBuffer.readableBytes() === 0 && !this.pendingData) {
-          this.socket.drain()
-          if (this.socket.inputBuffer.readableBytes() === 0) {
-            return
-          }
-        }
+        throw error
       }
     } finally {
       this.processing = false
-      // If data arrived while we were processing, process it
       if (this.pendingData) {
         this.pendingData = false
         this.processRequests()
@@ -119,10 +120,25 @@ export class SocketRpcServer {
     }
   }
 
-  /**
-   * Handle incoming requests manually (for cases where data event isn't triggered)
-   */
   async handleRequests(): Promise<void> {
     await this.processRequests()
+  }
+
+  registerMessageType(typeName: string): void {
+    this.messageChannel.registerMessageType(typeName)
+  }
+
+  onMessage(typeName: string, handler: (msg: unknown) => void): void
+  onMessage(typeName: string, handler: (msg: unknown, payloadSize: number) => void): void
+  onMessage(typeName: string, handler: (msg: unknown, payloadSize?: number) => void): void {
+    this.messageChannel.onMessage(typeName, handler as (msg: unknown, payloadSize?: number) => void)
+  }
+
+  sendMessage(typeName: string, value: object): void {
+    this.messageChannel.sendMessage(typeName, value)
+  }
+
+  channel(): SocketMessageChannel {
+    return this.messageChannel
   }
 }

@@ -1,120 +1,149 @@
 import type { TypeRegistry, RegisteredMethod } from './typeDescription.js'
-import { RawRpcClient } from './RawRpcClient.js'
-import { LocalSocket } from './LocalSocket.js'
-import { CircularBufferReader } from './CircularBufferReader.js'
-import { CircularBufferWriter } from './CircularBufferWriter.js'
+import type { TypeDescription } from './typeDescription.js'
+import { TypeKind } from './typeDescription.js'
 import { CodecRegistry } from './codec.js'
+import { SocketMessageChannel, type SocketMessageChannelSocket } from './SocketMessageChannel.js'
+import { ensureRpcTypesInRegistry, ensureRpcCodecs, RPC_REQUEST_TYPE, RPC_RESPONSE_TYPE, RPC_ERROR_TYPE } from './rpc.js'
+import { serializeValueByType, deserializeValueByType, type JsonValue } from './valueSerialization.js'
+import { RpcException } from './RpcException.js'
 import type { RpcClient } from './RpcClient.js'
 
+interface PendingResponse {
+  resolve: (value: unknown) => void
+  reject: (reason: unknown) => void
+  returnType: TypeDescription
+}
+
 export class SocketRpcClient implements RpcClient {
-  private readonly rawRpcClient: RawRpcClient
-  private readonly reader: CircularBufferReader
-  private readonly writer: CircularBufferWriter
-  private readonly codecs: CodecRegistry
-  private readonly socket: LocalSocket
+  private readonly messageChannel: SocketMessageChannel
+  private readonly typeRegistry: TypeRegistry
+  private readonly methodsById = new Map<number, RegisteredMethod>()
+  private readonly responseHandlers = new Map<number, PendingResponse>()
+  private lastRequestId = 0
 
-  constructor(socket: LocalSocket, typeRegistry: TypeRegistry, codecs: CodecRegistry) {
-    this.codecs = codecs
-    this.socket = socket
-    // Client reads responses from inputBuffer (data coming in)
-    this.reader = new CircularBufferReader(socket.inputBuffer, codecs)
-    // Client writes requests to outputBuffer (data going out)
-    this.writer = new CircularBufferWriter(socket.outputBuffer, codecs)
-      
-    const beforeSend = () => {
-      socket.poke(0, new Uint8Array(4), 4)
-      this.writer.offset = 4
-    }
+  constructor(socket: SocketMessageChannelSocket, typeRegistry: TypeRegistry, codecs: CodecRegistry) {
+    this.typeRegistry = typeRegistry
+    ensureRpcTypesInRegistry(typeRegistry)
+    ensureRpcCodecs(codecs, typeRegistry)
+    this.messageChannel = new SocketMessageChannel(socket, codecs)
+    this.messageChannel.registerMessageType(RPC_REQUEST_TYPE)
+    this.messageChannel.registerMessageType(RPC_RESPONSE_TYPE)
+    this.messageChannel.registerMessageType(RPC_ERROR_TYPE)
 
-    const sender = () => {
-      // write the request length as uint32_t
-      const requestLength = new Uint32Array([this.writer.offset - 4])
-      socket.poke(0, new Uint8Array(requestLength.buffer), 4)
-      socket.commitWrite(this.writer.offset)      
-      // Flush the socket to send data
-      socket.flush()
-    }
-    
-    this.rawRpcClient = new RawRpcClient(this.writer as any, typeRegistry, sender, beforeSend)
-    
-    // Set up data event handler to process incoming responses
-    socket.setOptions({
-      dataEventCallback: (dataSize: number) => {
-        this.processResponses()
+    this.messageChannel.onMessage(RPC_RESPONSE_TYPE, (msg: { request_id: number; success: boolean }, payloadSize: number) => {
+      const pending = this.responseHandlers.get(msg.request_id)
+      if (!pending) throw new Error(`Response handler ${msg.request_id} not found`)
+      this.responseHandlers.delete(msg.request_id)
+      if (pending.returnType.kind === TypeKind.Void) {
+        pending.resolve(undefined)
+        return
+      }
+      let result: unknown
+      deserializeValueByType(this.messageChannel.getReader() as any, this.typeRegistry, pending.returnType, (value) => {
+        result = value
+      })
+      this.messageChannel.getReader().readRest()
+      pending.resolve(result)
+    })
+
+    this.messageChannel.onMessage(RPC_ERROR_TYPE, (msg: { request_id: number; success: boolean; error: string }) => {
+      const pending = this.responseHandlers.get(msg.request_id)
+      if (!pending) throw new Error(`Response handler ${msg.request_id} not found`)
+      this.responseHandlers.delete(msg.request_id)
+      pending.reject(new RpcException(msg.error))
+    })
+
+    socket.setOptions?.({
+      dataEventCallback: () => {
+        this.messageChannel.handleData()
       }
     })
+
+    for (const method of typeRegistry.getMethods()) {
+      this.methodsById.set(method.methodId, method)
+    }
   }
 
   getMethod(methodId: number): RegisteredMethod {
-    return this.rawRpcClient.getMethod(methodId)
+    const method = this.methodsById.get(methodId)
+    if (!method) {
+      throw new Error(`Method with id ${methodId} not found in registry`)
+    }
+    return method
   }
 
   call(methodId: number, ...args: any[]): Promise<any> {
-    return this.rawRpcClient.call(methodId, ...args)
+    const method = this.getMethod(methodId)
+    if (method.methodType.kind === TypeKind.Method) {
+      throw new Error(`Method ${methodId} is a dynamic method, use callMethod instead`)
+    }
+    const returnType = method.methodType.item || ({ kind: TypeKind.Void, name: 'void' } as TypeDescription)
+    const parameterTypes = (method.methodType.members || []).map((m) => m.type)
+    const requestId = this.lastRequestId++
+    const promise = new Promise((resolve, reject) => {
+      this.responseHandlers.set(requestId, { resolve, reject, returnType })
+    })
+    const writer = this.messageChannel.beginSend(RPC_REQUEST_TYPE, { request_id: requestId, function_id: methodId })
+    if (args.length !== parameterTypes.length) {
+      throw new Error(`Argument count mismatch: expected ${parameterTypes.length}, got ${args.length}`)
+    }
+    for (let i = 0; i < args.length; i++) {
+      serializeValueByType(writer as any, this.typeRegistry, parameterTypes[i], args[i] as JsonValue)
+    }
+    writer.writeRest()
+    this.messageChannel.commitSend()
+    return promise
   }
 
   callMethod<TId>(methodId: number, id: TId, ...args: any[]): Promise<any> {
-    return this.rawRpcClient.callMethod(methodId, id, ...args)
-  }
-
-  /**
-   * Process incoming responses from the socket
-   */
-  private processResponses(): void {
-    const LENGTH_SIZE = 4
-    
-    while (true) {
-      // Check if we have enough data for the length prefix
-      if (this.socket.inputBuffer.readableBytes() < LENGTH_SIZE) {
-        this.socket.drain()
-        return // not enough data yet
-      }
-
-      // Peek at the length
-      const lengthBuffer = new Uint8Array(LENGTH_SIZE)
-      const bytesPeeked = this.socket.peek(0, lengthBuffer, LENGTH_SIZE)
-      if (bytesPeeked < LENGTH_SIZE) {
-        this.socket.drain()
-        return // not enough data yet
-      }
-
-      // Convert to uint32 (little-endian, matching C++)
-      const dataView = new DataView(lengthBuffer.buffer, lengthBuffer.byteOffset, lengthBuffer.byteLength)
-      const messageLength = dataView.getUint32(0, true)
-
-      // Check if we have enough data for the full message
-      const available = this.socket.inputBuffer.readableBytes()
-      if (available < LENGTH_SIZE + messageLength) {
-        this.socket.reserveForReading(messageLength + LENGTH_SIZE)
-        this.socket.drain()
-        return // wait for full message
-      }
-
-      this.socket.skipRead(LENGTH_SIZE)
-
-      try {
-        // Handle the RPC response
-        this.rawRpcClient.handleResponse(this.reader as any)
-      } catch (error) {
-        // If we can't read a complete response yet, wait for more data
-        if (error instanceof Error && (error.message.includes('end of buffer') || error.message.includes('Unexpected end'))) {
-          break
-        }
-        throw error
-      }
-
-      // If no more data, drain and return
-      if (this.socket.inputBuffer.readableBytes() === 0) {
-        this.socket.drain()
-        return
-      }
+    const method = this.getMethod(methodId)
+    if (method.methodType.kind === TypeKind.Function) {
+      throw new Error(`Method ${methodId} is a static/singleton method, use call instead`)
     }
+    const ownerType = method.ownerType
+    const idMember = ownerType.members?.find((m) => m.type.kind !== TypeKind.Method && m.type.kind !== TypeKind.Function)
+    if (!idMember) {
+      throw new Error(`Could not determine ID type for dynamic method ${methodId}`)
+    }
+    const idType = idMember.type
+    const returnType = method.methodType.item || ({ kind: TypeKind.Void, name: 'void' } as TypeDescription)
+    const parameterTypes = (method.methodType.members || []).map((m) => m.type)
+    const requestId = this.lastRequestId++
+    const promise = new Promise((resolve, reject) => {
+      this.responseHandlers.set(requestId, { resolve, reject, returnType })
+    })
+    const writer = this.messageChannel.beginSend(RPC_REQUEST_TYPE, { request_id: requestId, function_id: methodId })
+    serializeValueByType(writer as any, this.typeRegistry, idType, id as JsonValue)
+    if (args.length !== parameterTypes.length) {
+      throw new Error(`Argument count mismatch: expected ${parameterTypes.length}, got ${args.length}`)
+    }
+    for (let i = 0; i < args.length; i++) {
+      serializeValueByType(writer as any, this.typeRegistry, parameterTypes[i], args[i] as JsonValue)
+    }
+    writer.writeRest()
+    this.messageChannel.commitSend()
+    return promise
   }
 
-  /**
-   * Handle an incoming response manually (for cases where data event isn't triggered)
-   */
   handleResponse(): void {
-    this.processResponses()
+    this.messageChannel.handleData()
+  }
+
+  registerMessageType(typeName: string): void {
+    this.messageChannel.registerMessageType(typeName)
+  }
+
+  onMessage(typeName: string, handler: (msg: unknown) => void): void
+  onMessage(typeName: string, handler: (msg: unknown, payloadSize: number) => void): void
+  onMessage(typeName: string, handler: (msg: unknown, payloadSize?: number) => void): void {
+    this.messageChannel.onMessage(typeName, handler as (msg: unknown, payloadSize?: number) => void)
+  }
+
+  sendMessage(typeName: string, value: object): void {
+    this.messageChannel.sendMessage(typeName, value)
+  }
+
+  channel(): SocketMessageChannel {
+    return this.messageChannel
   }
 }

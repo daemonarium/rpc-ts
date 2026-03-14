@@ -132,7 +132,17 @@ export class RawRpcServer {
   async handleCall(reader: Reader, writer: Writer): Promise<void> {
     const requestId = Number(reader.readU64())
     const methodId = Number(reader.readU64())
+    return this.handleCallWithIds(requestId, methodId, reader, writer)
+  }
 
+  hasHandler(methodId: number): boolean {
+    return this.handlers.has(methodId)
+  }
+
+  /**
+   * Handle an RPC call when request_id and method_id were already read (e.g. from a message channel).
+   */
+  async handleCallWithIds(requestId: number, methodId: number, reader: Reader, writer: Writer): Promise<void> {
     const handler = this.handlers.get(methodId)
     if (!handler) {
       this.beforeSend()
@@ -143,7 +153,6 @@ export class RawRpcServer {
       this.sender()
       return
     }
-
     await handler(reader, writer, requestId)
   }
 

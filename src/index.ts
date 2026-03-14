@@ -29,6 +29,17 @@ export type { MethodDescription } from './RawRpcServer.js'
 export { RawRpcClient } from './RawRpcClient.js'
 export { RpcException } from './RpcException.js'
 export type { RpcClient } from './RpcClient.js'
+export { SocketMessageChannel, type SocketMessageChannelSocket } from './SocketMessageChannel.js'
+export {
+  ensureRpcTypesInRegistry,
+  ensureRpcCodecs,
+  RPC_REQUEST_TYPE,
+  RPC_RESPONSE_TYPE,
+  RPC_ERROR_TYPE,
+  type RpcRequest,
+  type RpcResponse,
+  type RpcError,
+} from './rpc.js'
 export { SocketRpcClient } from './SocketRpcClient.js'
 export { SocketRpcServer } from './SocketRpcServer.js'
 export { RpcDebugger } from './rpcDebugger.js'
