@@ -152,6 +152,46 @@ export interface CircularBuffer {
   pokeSVarInt(offset: number, value: number | bigint): number
 
   /**
+   * Peek unsigned 32-bit varint at offset (same encoding as 64-bit for values in 32-bit range).
+   */
+  peekUVarInt32(offset: number): { value: number, bytesRead: number }
+
+  /**
+   * Poke unsigned 32-bit varint.
+   */
+  pokeUVarInt32(offset: number, value: number): number
+
+  /**
+   * Peek signed 32-bit varint at offset (same encoding as 64-bit for values in 32-bit range).
+   */
+  peekSVarInt32(offset: number): { value: number, bytesRead: number }
+
+  /**
+   * Poke signed 32-bit varint.
+   */
+  pokeSVarInt32(offset: number, value: number): number
+
+  /**
+   * Peek unsigned 16-bit varint at offset (same encoding as 64-bit for values in 16-bit range).
+   */
+  peekUVarInt16(offset: number): { value: number, bytesRead: number }
+
+  /**
+   * Poke unsigned 16-bit varint.
+   */
+  pokeUVarInt16(offset: number, value: number): number
+
+  /**
+   * Peek signed 16-bit varint at offset (same encoding as 64-bit for values in 16-bit range).
+   */
+  peekSVarInt16(offset: number): { value: number, bytesRead: number }
+
+  /**
+   * Poke signed 16-bit varint.
+   */
+  pokeSVarInt16(offset: number, value: number): number
+
+  /**
    * Copy data from this buffer to destination buffer
    * @param destination Destination buffer
    * @returns Number of bytes copied

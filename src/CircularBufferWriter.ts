@@ -35,6 +35,49 @@ export class CircularBufferWriter {
     this.writeSVarInt(BigInt(value))
   }
 
+  writeU32(value: number): void {
+    this.offset += this.buffer.pokeUVarInt32(this.offset, value)
+  }
+
+  writeI32(value: number): void {
+    this.offset += this.buffer.pokeSVarInt32(this.offset, value)
+  }
+
+  writeU16(value: number): void {
+    this.offset += this.buffer.pokeUVarInt16(this.offset, value)
+  }
+
+  writeI16(value: number): void {
+    this.offset += this.buffer.pokeSVarInt16(this.offset, value)
+  }
+
+  writeU8(value: number): void {
+    const bytes = new Uint8Array([value & 0xFF])
+    this.offset += this.buffer.poke(this.offset, bytes, 1)
+  }
+
+  writeI8(value: number): void {
+    const bytes = new Uint8Array([(value ^ 0x80) & 0xFF])
+    this.offset += this.buffer.poke(this.offset, bytes, 1)
+  }
+
+  writeF32(value: number): void {
+    this.scratchView.setFloat32(0, value, true)
+    let bits = this.scratchView.getUint32(0, true)
+    if ((bits & 0x80000000) !== 0) {
+      bits = (~bits) >>> 0
+    } else {
+      bits ^= 0x80000000
+    }
+    if (value === 0) bits = 0x80000000
+    const bytes = new Uint8Array(4)
+    bytes[0] = (bits >> 24) & 0xFF
+    bytes[1] = (bits >> 16) & 0xFF
+    bytes[2] = (bits >> 8) & 0xFF
+    bytes[3] = bits & 0xFF
+    this.offset += this.buffer.poke(this.offset, bytes, 4)
+  }
+
   writeF64(value: number): void {
     // Same encoding as C++ circular_buffer_writer: transform then write big-endian.
     this.scratchView.setFloat64(0, value, true)

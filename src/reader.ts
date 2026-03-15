@@ -45,6 +45,57 @@ export class Reader {
     return this.readSVarInt()
   }
 
+  readU32(): number {
+    const v = this.readUVarInt()
+    const n = typeof v === 'bigint' ? Number(v) : v
+    if (n < 0 || n > 0xFFFFFFFF) throw new Error('u32 out of range')
+    return n >>> 0
+  }
+
+  readI32(): number {
+    const v = this.readSVarInt()
+    const n = typeof v === 'bigint' ? Number(v) : v
+    if (n < -0x80000000 || n > 0x7FFFFFFF) throw new Error('i32 out of range')
+    return n | 0
+  }
+
+  readU16(): number {
+    const v = this.readUVarInt()
+    const n = typeof v === 'bigint' ? Number(v) : v
+    if (n < 0 || n > 0xFFFF) throw new Error('u16 out of range')
+    return n & 0xFFFF
+  }
+
+  readI16(): number {
+    const v = this.readSVarInt()
+    const n = typeof v === 'bigint' ? Number(v) : v
+    if (n < -0x8000 || n > 0x7FFF) throw new Error('i16 out of range')
+    return n << 16 >> 16
+  }
+
+  readU8(): number {
+    return this.readByte()
+  }
+
+  readI8(): number {
+    return (this.readByte() ^ 0x80) << 24 >> 24
+  }
+
+  readF32(): number {
+    const b0 = this.readByte()
+    const b1 = this.readByte()
+    const b2 = this.readByte()
+    const b3 = this.readByte()
+    let v = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3
+    if ((v & 0x80000000) !== 0) {
+      v ^= 0x80000000
+    } else {
+      v = (~v) >>> 0
+    }
+    this.scratchView.setUint32(0, v, true)
+    return this.scratchView.getFloat32(0, true)
+  }
+
   readF64(): number {
     const bits = this.readBigEndianUint64()
     let value = bits

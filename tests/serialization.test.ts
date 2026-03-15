@@ -28,16 +28,17 @@ function bytesToHex(bytes: Uint8Array): string {
     .join('')
 }
 
-type RowType = 'u64' | 'i64' | 'f64'
+type RowType = 'u64' | 'i64' | 'f64' | 'u32' | 'i32' | 'u16' | 'i16' | 'f32' | 'u8' | 'i8'
 
 function parseExpectedValue(type: RowType, valueStr: string): number | bigint {
-  if (type === 'f64') {
+  if (type === 'f64' || type === 'f32') {
     if (valueStr === 'inf') return Infinity
     if (valueStr === '-inf') return -Infinity
     if (valueStr === 'nan') return NaN
     return Number(valueStr)
   }
-  return BigInt(valueStr)
+  if (type === 'u64' || type === 'i64') return BigInt(valueStr)
+  return Number(valueStr)
 }
 
 function valuesEqual(type: RowType, expected: number | bigint, actual: number | bigint): boolean {
@@ -47,7 +48,75 @@ function valuesEqual(type: RowType, expected: number | bigint, actual: number | 
     if (Number.isNaN(e)) return Number.isNaN(a)
     return e === a
   }
-  return BigInt(expected) === BigInt(actual)
+  if (type === 'f32') {
+    const e = expected as number
+    const a = actual as number
+    if (Number.isNaN(e)) return Number.isNaN(a)
+    if (!Number.isFinite(e)) return e === a
+    return Math.abs(e - a) <= Math.abs(e) * 1e-6 + 1e-6
+  }
+  if (type === 'u64' || type === 'i64') return BigInt(expected) === BigInt(actual)
+  return Number(expected) === Number(actual)
+}
+
+function readByType(reader: CircularBufferReader, type: RowType): number | bigint {
+  switch (type) {
+    case 'u64': return reader.readU64()
+    case 'i64': return reader.readI64()
+    case 'f64': return reader.readF64()
+    case 'u32': return reader.readU32()
+    case 'i32': return reader.readI32()
+    case 'u16': return reader.readU16()
+    case 'i16': return reader.readI16()
+    case 'f32': return reader.readF32()
+    case 'u8': return reader.readU8()
+    case 'i8': return reader.readI8()
+  }
+}
+
+function writeByType(writer: LocalCircularBufferWriter, type: RowType, value: number | bigint): void {
+  switch (type) {
+    case 'u64': writer.writeU64(value as bigint); break
+    case 'i64': writer.writeI64(value as bigint); break
+    case 'f64': writer.writeF64(value as number); break
+    case 'u32': writer.writeU32(value as number); break
+    case 'i32': writer.writeI32(value as number); break
+    case 'u16': writer.writeU16(value as number); break
+    case 'i16': writer.writeI16(value as number); break
+    case 'f32': writer.writeF32(value as number); break
+    case 'u8': writer.writeU8(value as number); break
+    case 'i8': writer.writeI8(value as number); break
+  }
+}
+
+function readByTypeReader(reader: Reader, type: RowType): number | bigint {
+  switch (type) {
+    case 'u64': return reader.readU64()
+    case 'i64': return reader.readI64()
+    case 'f64': return reader.readF64()
+    case 'u32': return reader.readU32()
+    case 'i32': return reader.readI32()
+    case 'u16': return reader.readU16()
+    case 'i16': return reader.readI16()
+    case 'f32': return reader.readF32()
+    case 'u8': return reader.readU8()
+    case 'i8': return reader.readI8()
+  }
+}
+
+function writeByTypeWriter(writer: Writer, type: RowType, value: number | bigint): void {
+  switch (type) {
+    case 'u64': writer.writeU64(value as bigint); break
+    case 'i64': writer.writeI64(value as bigint); break
+    case 'f64': writer.writeF64(value as number); break
+    case 'u32': writer.writeU32(value as number); break
+    case 'i32': writer.writeI32(value as number); break
+    case 'u16': writer.writeU16(value as number); break
+    case 'i16': writer.writeI16(value as number); break
+    case 'f32': writer.writeF32(value as number); break
+    case 'u8': writer.writeU8(value as number); break
+    case 'i8': writer.writeI8(value as number); break
+  }
 }
 
 describe('serialization reference (C++ TSV)', () => {
@@ -68,24 +137,21 @@ describe('serialization reference (C++ TSV)', () => {
 
   it('deserializes each reference row to the expected value', () => {
     const codecs = new CodecRegistry()
-    for (const { type, valueStr, hex } of rows) {
+    rows.forEach(({ type, valueStr, hex }, index) => {
       const buffer = new LocalCircularBuffer(64)
       const bytes = hexToBytes(hex)
       buffer.write(bytes, bytes.length)
 
       const reader = new CircularBufferReader(buffer, codecs)
       let actual: number | bigint
-      if (type === 'u64') {
-        actual = reader.readU64()
-      } else if (type === 'i64') {
-        actual = reader.readI64()
-      } else {
-        actual = reader.readF64()
+      try {
+        actual = readByType(reader, type)
+      } catch (err) {
+        throw new Error(`row ${index}: type=${type} valueStr=${valueStr} hex=${hex}: ${err}`)
       }
-
       const expected = parseExpectedValue(type, valueStr)
-      expect(valuesEqual(type, expected, actual), `type=${type} valueStr=${valueStr}`).to.be.true
-    }
+      expect(valuesEqual(type, expected, actual), `row ${index}: type=${type} valueStr=${valueStr}`).to.be.true
+    })
   })
 
   it('serializes each reference value to the expected hex', () => {
@@ -94,14 +160,7 @@ describe('serialization reference (C++ TSV)', () => {
       const expected = parseExpectedValue(type, valueStr)
       const buffer = new LocalCircularBuffer(64)
       const writer = new LocalCircularBufferWriter(buffer, codecs, 0)
-
-      if (type === 'u64') {
-        writer.writeU64(expected as bigint)
-      } else if (type === 'i64') {
-        writer.writeI64(expected as bigint)
-      } else {
-        writer.writeF64(expected as number)
-      }
+      writeByType(writer, type, expected)
 
       buffer.commitWrite(writer.offset)
       const dest = new Uint8Array(writer.offset)
@@ -133,14 +192,7 @@ describe('Reader and Writer (serialization reference)', () => {
     for (const { type, valueStr, hex } of rows) {
       const bytes = hexToBytes(hex)
       const reader = new Reader(bytes, codecs)
-      let actual: number | bigint
-      if (type === 'u64') {
-        actual = reader.readU64()
-      } else if (type === 'i64') {
-        actual = reader.readI64()
-      } else {
-        actual = reader.readF64()
-      }
+      const actual = readByTypeReader(reader, type)
       const expected = parseExpectedValue(type, valueStr)
       expect(valuesEqual(type, expected, actual), `type=${type} valueStr=${valueStr}`).to.be.true
     }
@@ -151,13 +203,7 @@ describe('Reader and Writer (serialization reference)', () => {
     for (const { type, valueStr, hex } of rows) {
       const expected = parseExpectedValue(type, valueStr)
       const writer = new Writer(codecs, 64)
-      if (type === 'u64') {
-        writer.writeU64(expected as bigint)
-      } else if (type === 'i64') {
-        writer.writeI64(expected as bigint)
-      } else {
-        writer.writeF64(expected as number)
-      }
+      writeByTypeWriter(writer, type, expected)
       const buf = writer.toArrayBuffer()
       const actualHex = bytesToHex(new Uint8Array(buf))
       expect(actualHex, `type=${type} valueStr=${valueStr}`).to.equal(hex.toLowerCase())
@@ -328,6 +374,35 @@ describe('circular buffer roundtrip', () => {
     expect(roundtrip(defaultBufSize, (w) => w.writeF64(-Infinity), (r) => r.readF64())).to.equal(-Infinity)
     expect(roundtrip(defaultBufSize, (w) => w.writeF64(Infinity), (r) => r.readF64())).to.equal(Infinity)
     expect(Number.isNaN(roundtrip(defaultBufSize, (w) => w.writeF64(NaN), (r) => r.readF64()) as number)).to.be.true
+  })
+
+  it('roundtrips u32, i32, u16, i16', () => {
+    expect(roundtrip(defaultBufSize, (w) => w.writeU32(0), (r) => r.readU32())).to.equal(0)
+    expect(roundtrip(defaultBufSize, (w) => w.writeU32(0xFFFFFFFF), (r) => r.readU32())).to.equal(0xFFFFFFFF)
+    expect(roundtrip(defaultBufSize, (w) => w.writeI32(0), (r) => r.readI32())).to.equal(0)
+    expect(roundtrip(defaultBufSize, (w) => w.writeI32(0x7FFFFFFF), (r) => r.readI32())).to.equal(0x7FFFFFFF)
+    expect(roundtrip(defaultBufSize, (w) => w.writeI32(-0x80000000), (r) => r.readI32())).to.equal(-0x80000000)
+    expect(roundtrip(defaultBufSize, (w) => w.writeU16(0), (r) => r.readU16())).to.equal(0)
+    expect(roundtrip(defaultBufSize, (w) => w.writeU16(0xFFFF), (r) => r.readU16())).to.equal(0xFFFF)
+    expect(roundtrip(defaultBufSize, (w) => w.writeI16(32767), (r) => r.readI16())).to.equal(32767)
+    expect(roundtrip(defaultBufSize, (w) => w.writeI16(-32768), (r) => r.readI16())).to.equal(-32768)
+  })
+
+  it('roundtrips f32 (including inf, -inf, NaN)', () => {
+    expect(roundtrip(defaultBufSize, (w) => w.writeF32(0), (r) => r.readF32())).to.equal(0)
+    expect(roundtrip(defaultBufSize, (w) => w.writeF32(1.5), (r) => r.readF32())).to.equal(1.5)
+    expect(roundtrip(defaultBufSize, (w) => w.writeF32(-1.5), (r) => r.readF32())).to.equal(-1.5)
+    expect(roundtrip(defaultBufSize, (w) => w.writeF32(-Infinity), (r) => r.readF32())).to.equal(-Infinity)
+    expect(roundtrip(defaultBufSize, (w) => w.writeF32(Infinity), (r) => r.readF32())).to.equal(Infinity)
+    expect(Number.isNaN(roundtrip(defaultBufSize, (w) => w.writeF32(NaN), (r) => r.readF32()) as number)).to.be.true
+  })
+
+  it('roundtrips u8, i8', () => {
+    expect(roundtrip(defaultBufSize, (w) => w.writeU8(0), (r) => r.readU8())).to.equal(0)
+    expect(roundtrip(defaultBufSize, (w) => w.writeU8(255), (r) => r.readU8())).to.equal(255)
+    expect(roundtrip(defaultBufSize, (w) => w.writeI8(0), (r) => r.readI8())).to.equal(0)
+    expect(roundtrip(defaultBufSize, (w) => w.writeI8(127), (r) => r.readI8())).to.equal(127)
+    expect(roundtrip(defaultBufSize, (w) => w.writeI8(-128), (r) => r.readI8())).to.equal(-128)
   })
 
   it('roundtrips bool', () => {

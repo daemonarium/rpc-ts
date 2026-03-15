@@ -998,6 +998,323 @@ export class MemoryCircularBuffer implements CircularBuffer {
     return written
   }
 
+  /** Peek unsigned 32-bit varint (same encoding as C circular_buffer_peek_uvarint32). */
+  peekUVarInt32(offset: number): { value: number, bytesRead: number } {
+    const number = new Uint8Array(5)
+    const firstRead = this.peek(offset, number, 1)
+    if (firstRead === 0) return { value: 0, bytesRead: 0 }
+    const first = number[0]
+    if ((first & 0x80) === 0) return { value: first, bytesRead: 1 }
+    if ((first & 0x40) === 0) {
+      const r = this.peek(offset + 1, number.subarray(1), 1)
+      if (r === 0) return { value: 0, bytesRead: 0 }
+      return { value: ((first & 0x3F) << 8) | number[1], bytesRead: 2 }
+    }
+    if ((first & 0x20) === 0) {
+      const r = this.peek(offset + 1, number.subarray(1), 2)
+      if (r === 0) return { value: 0, bytesRead: 0 }
+      return { value: ((first & 0x1F) << 16) | (number[1] << 8) | number[2], bytesRead: 3 }
+    }
+    if ((first & 0x10) === 0) {
+      const r = this.peek(offset + 1, number.subarray(1), 3)
+      if (r === 0) return { value: 0, bytesRead: 0 }
+      return { value: ((first & 0x0F) << 24) | (number[1] << 16) | (number[2] << 8) | number[3], bytesRead: 4 }
+    }
+    if ((first & 0x08) === 0) {
+      const r = this.peek(offset + 1, number.subarray(1), 4)
+      if (r === 0 || (first & 0x07) !== 0) return { value: 0, bytesRead: 0 }
+      const v = (number[1] << 24) | (number[2] << 16) | (number[3] << 8) | number[4]
+      return { value: v >>> 0, bytesRead: 5 }
+    }
+    return { value: 0, bytesRead: 0 }
+  }
+
+  pokeUVarInt32(offset: number, value: number): number {
+    if (value < 0 || value > 0xFFFFFFFF) throw new Error('UVarInt32 out of range')
+    const bytes = new Uint8Array(5)
+    let n = 0
+    if (value < 0x80) {
+      bytes[0] = value
+      n = 1
+    } else if (value < 0x4000) {
+      bytes[0] = 0x80 | (value >> 8)
+      bytes[1] = value & 0xFF
+      n = 2
+    } else if (value < 0x200000) {
+      bytes[0] = 0xC0 | (value >> 16)
+      bytes[1] = (value >> 8) & 0xFF
+      bytes[2] = value & 0xFF
+      n = 3
+    } else if (value < 0x10000000) {
+      bytes[0] = 0xE0 | (value >> 24)
+      bytes[1] = (value >> 16) & 0xFF
+      bytes[2] = (value >> 8) & 0xFF
+      bytes[3] = value & 0xFF
+      n = 4
+    } else {
+      bytes[0] = 0xF0
+      bytes[1] = (value >> 24) & 0xFF
+      bytes[2] = (value >> 16) & 0xFF
+      bytes[3] = (value >> 8) & 0xFF
+      bytes[4] = value & 0xFF
+      n = 5
+    }
+    const w = this.poke(offset, bytes.subarray(0, n), n)
+    if (w !== n) throw new Error('Failed to poke uvarint32')
+    return n
+  }
+
+  /** Peek signed 32-bit varint (same encoding as C circular_buffer_peek_svarint32). */
+  peekSVarInt32(offset: number): { value: number, bytesRead: number } {
+    const number = new Uint8Array(5)
+    const firstRead = this.peek(offset, number, 1)
+    if (firstRead === 0) return { value: 0, bytesRead: 0 }
+    const first = number[0]
+    const negative = (first & 0x80) === 0
+    if (negative) {
+      if ((first & 0x40) !== 0) return { value: -((~first) & 0x3F), bytesRead: 1 }
+      if ((first & 0xE0) === 0x20) {
+        const r = this.peek(offset + 1, number.subarray(1), 1)
+        if (r === 0) return { value: 0, bytesRead: 0 }
+        const enc = ((first & 0x1F) << 8) | number[1]
+        return { value: -(0x1FFF - enc), bytesRead: 2 }
+      }
+      if ((first & 0xF0) === 0x10) {
+        const r = this.peek(offset + 1, number.subarray(1), 2)
+        if (r < 2) return { value: 0, bytesRead: 0 }
+        const enc = ((first & 0x0F) << 16) | (number[1] << 8) | number[2]
+        return { value: -(0xFFFFF - enc), bytesRead: 3 }
+      }
+      if ((first & 0xF8) === 0x08) {
+        const r = this.peek(offset + 1, number.subarray(1), 3)
+        if (r < 3) return { value: 0, bytesRead: 0 }
+        const enc = ((first & 0x07) << 24) | (number[1] << 16) | (number[2] << 8) | number[3]
+        return { value: -(0x7FFFFFF - enc), bytesRead: 4 }
+      }
+      if ((first & 0xFC) === 0x04) {
+        const r = this.peek(offset + 1, number.subarray(1), 4)
+        if (r < 4) return { value: 0, bytesRead: 0 }
+        const enc = (first & 0x03) * 0x100000000 + (number[1] << 24) | (number[2] << 16) | (number[3] << 8) | number[4]
+        const mag = 0x3FFFFFFFF - enc
+        if (mag > 0x80000000) return { value: 0, bytesRead: 0 }
+        return { value: -mag | 0, bytesRead: 5 }
+      }
+      return { value: 0, bytesRead: 0 }
+    }
+    if ((first & 0x40) === 0) return { value: first & 0x3F, bytesRead: 1 }
+    if ((first & 0x20) === 0) {
+      const r = this.peek(offset + 1, number.subarray(1), 1)
+      if (r === 0) return { value: 0, bytesRead: 0 }
+      return { value: ((first & 0x1F) << 8) | number[1], bytesRead: 2 }
+    }
+    if ((first & 0x10) === 0) {
+      const r = this.peek(offset + 1, number.subarray(1), 2)
+      if (r < 2) return { value: 0, bytesRead: 0 }
+      return { value: ((first & 0x0F) << 16) | (number[1] << 8) | number[2], bytesRead: 3 }
+    }
+    if ((first & 0x08) === 0) {
+      const r = this.peek(offset + 1, number.subarray(1), 3)
+      if (r < 3) return { value: 0, bytesRead: 0 }
+      const enc = ((first & 0x07) << 24) | (number[1] << 16) | (number[2] << 8) | number[3]
+      if (enc > 0x7FFFFFFF) return { value: 0, bytesRead: 0 }
+      return { value: enc, bytesRead: 4 }
+    }
+    if ((first & 0x04) === 0) {
+      const r = this.peek(offset + 1, number.subarray(1), 4)
+      if (r < 4 || (first & 0x03) !== 0) return { value: 0, bytesRead: 0 }
+      const enc = (number[1] << 24) | (number[2] << 16) | (number[3] << 8) | number[4]
+      if (enc > 0x7FFFFFFF) return { value: 0, bytesRead: 0 }
+      return { value: enc, bytesRead: 5 }
+    }
+    return { value: 0, bytesRead: 0 }
+  }
+
+  pokeSVarInt32(offset: number, value: number): number {
+    const u = value < 0 ? (-value) >>> 0 : value >>> 0
+    const bytes = new Uint8Array(5)
+    let n = 0
+    if (value < 0) {
+      if (u <= 0x3F) {
+        bytes[0] = 0x40 | ((~u) & 0x3F)
+        n = 1
+      } else if (u <= 0x1FFF) {
+        bytes[0] = 0x20 | (((~u) >> 8) & 0x1F)
+        bytes[1] = (~u) & 0xFF
+        n = 2
+      } else if (u <= 0xFFFFF) {
+        bytes[0] = 0x10 | (((~u) >> 16) & 0x0F)
+        bytes[1] = ((~u) >> 8) & 0xFF
+        bytes[2] = (~u) & 0xFF
+        n = 3
+      } else if (u <= 0x7FFFFFF) {
+        bytes[0] = 0x08 | (((~u) >> 24) & 0x07)
+        bytes[1] = ((~u) >> 16) & 0xFF
+        bytes[2] = ((~u) >> 8) & 0xFF
+        bytes[3] = (~u) & 0xFF
+        n = 4
+      } else {
+        if (u > 0x80000000) throw new Error('SVarInt32 out of range')
+        bytes[0] = 0x07
+        bytes[1] = ((~u) >> 24) & 0xFF
+        bytes[2] = ((~u) >> 16) & 0xFF
+        bytes[3] = ((~u) >> 8) & 0xFF
+        bytes[4] = (~u) & 0xFF
+        n = 5
+      }
+    } else {
+      if (u <= 0x3F) {
+        bytes[0] = 0x80 | u
+        n = 1
+      } else if (u <= 0x1FFF) {
+        bytes[0] = 0xC0 | (u >> 8)
+        bytes[1] = u & 0xFF
+        n = 2
+      } else if (u <= 0xFFFFF) {
+        bytes[0] = 0xE0 | (u >> 16)
+        bytes[1] = (u >> 8) & 0xFF
+        bytes[2] = u & 0xFF
+        n = 3
+      } else if (u <= 0x7FFFFFF) {
+        bytes[0] = 0xF0 | (u >> 24)
+        bytes[1] = (u >> 16) & 0xFF
+        bytes[2] = (u >> 8) & 0xFF
+        bytes[3] = u & 0xFF
+        n = 4
+      } else {
+        bytes[0] = 0xF8
+        bytes[1] = (u >> 24) & 0xFF
+        bytes[2] = (u >> 16) & 0xFF
+        bytes[3] = (u >> 8) & 0xFF
+        bytes[4] = u & 0xFF
+        n = 5
+      }
+    }
+    const w = this.poke(offset, bytes.subarray(0, n), n)
+    if (w !== n) throw new Error('Failed to poke svarint32')
+    return n
+  }
+
+  peekUVarInt16(offset: number): { value: number, bytesRead: number } {
+    const number = new Uint8Array(3)
+    const firstRead = this.peek(offset, number, 1)
+    if (firstRead === 0) return { value: 0, bytesRead: 0 }
+    const first = number[0]
+    if ((first & 0x80) === 0) return { value: first, bytesRead: 1 }
+    if ((first & 0x40) === 0) {
+      const r = this.peek(offset + 1, number.subarray(1), 1)
+      if (r === 0) return { value: 0, bytesRead: 0 }
+      return { value: ((first & 0x3F) << 8) | number[1], bytesRead: 2 }
+    }
+    if ((first & 0x20) === 0) {
+      const r = this.peek(offset + 1, number.subarray(1), 2)
+      if (r === 0 || (first & 0x1F) !== 0) return { value: 0, bytesRead: 0 }
+      return { value: (number[1] << 8) | number[2], bytesRead: 3 }
+    }
+    return { value: 0, bytesRead: 0 }
+  }
+
+  pokeUVarInt16(offset: number, value: number): number {
+    if (value < 0 || value > 0xFFFF) throw new Error('UVarInt16 out of range')
+    const bytes = new Uint8Array(3)
+    let n: number
+    if (value < 0x80) {
+      bytes[0] = value
+      n = 1
+    } else if (value < 0x4000) {
+      bytes[0] = 0x80 | (value >> 8)
+      bytes[1] = value & 0xFF
+      n = 2
+    } else {
+      bytes[0] = 0xC0
+      bytes[1] = (value >> 8) & 0xFF
+      bytes[2] = value & 0xFF
+      n = 3
+    }
+    const w = this.poke(offset, bytes.subarray(0, n), n)
+    if (w !== n) throw new Error('Failed to poke uvarint16')
+    return n
+  }
+
+  peekSVarInt16(offset: number): { value: number, bytesRead: number } {
+    const number = new Uint8Array(3)
+    const firstRead = this.peek(offset, number, 1)
+    if (firstRead === 0) return { value: 0, bytesRead: 0 }
+    const first = number[0]
+    const negative = (first & 0x80) === 0
+    if (negative) {
+      if ((first & 0x40) !== 0) return { value: -((~first) & 0x3F), bytesRead: 1 }
+      if ((first & 0xE0) === 0x20) {
+        const r = this.peek(offset + 1, number.subarray(1), 1)
+        if (r === 0) return { value: 0, bytesRead: 0 }
+        const enc = ((first & 0x1F) << 8) | number[1]
+        return { value: -(0x1FFF - enc), bytesRead: 2 }
+      }
+      if ((first & 0xF0) === 0x10) {
+        const r = this.peek(offset + 1, number.subarray(1), 2)
+        if (r < 2) return { value: 0, bytesRead: 0 }
+        const enc = ((first & 0x0F) << 16) | (number[1] << 8) | number[2]
+        const mag = 0xFFFFF - enc
+        if (mag > 0x8000) return { value: 0, bytesRead: 0 }
+        return { value: -mag, bytesRead: 3 }
+      }
+      return { value: 0, bytesRead: 0 }
+    }
+    if ((first & 0x40) === 0) return { value: first & 0x3F, bytesRead: 1 }
+    if ((first & 0x20) === 0) {
+      const r = this.peek(offset + 1, number.subarray(1), 1)
+      if (r === 0) return { value: 0, bytesRead: 0 }
+      return { value: ((first & 0x1F) << 8) | number[1], bytesRead: 2 }
+    }
+    if ((first & 0x10) === 0) {
+      const r = this.peek(offset + 1, number.subarray(1), 2)
+      if (r < 2 || (first & 0x0F) !== 0) return { value: 0, bytesRead: 0 }
+      const enc = (number[1] << 8) | number[2]
+      if (enc > 0x7FFF) return { value: 0, bytesRead: 0 }
+      return { value: enc, bytesRead: 3 }
+    }
+    return { value: 0, bytesRead: 0 }
+  }
+
+  pokeSVarInt16(offset: number, value: number): number {
+    const u = value < 0 ? (-value) & 0xFFFF : value & 0xFFFF
+    const bytes = new Uint8Array(3)
+    let n: number
+    if (value < 0) {
+      if (u <= 0x3F) {
+        bytes[0] = 0x40 | ((~u) & 0x3F)
+        n = 1
+      } else if (u <= 0x1FFF) {
+        bytes[0] = 0x20 | (((~u) >> 8) & 0x1F)
+        bytes[1] = (~u) & 0xFF
+        n = 2
+      } else {
+        if (u > 0x8000) throw new Error('SVarInt16 out of range')
+        const encoded = 0xF0000 + (0xFFFF - u)
+        bytes[0] = 0x10 | (encoded >> 16)
+        bytes[1] = (encoded >> 8) & 0xFF
+        bytes[2] = encoded & 0xFF
+        n = 3
+      }
+    } else {
+      if (u <= 0x3F) {
+        bytes[0] = 0x80 | u
+        n = 1
+      } else if (u <= 0x1FFF) {
+        bytes[0] = 0xC0 | (u >> 8)
+        bytes[1] = u & 0xFF
+        n = 2
+      } else {
+        bytes[0] = 0xE0
+        bytes[1] = (u >> 8) & 0xFF
+        bytes[2] = u & 0xFF
+        n = 3
+      }
+    }
+    const w = this.poke(offset, bytes.subarray(0, n), n)
+    if (w !== n) throw new Error('Failed to poke svarint16')
+    return n
+  }
+
   copyTo(destination: CircularBuffer): number {
     const readableBytes = this.readableBytes()
     const writableBytes = destination.writableBytes()

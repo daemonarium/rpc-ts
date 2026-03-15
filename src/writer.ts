@@ -39,6 +39,49 @@ export class Writer {
     this.writeSVarInt(BigInt(value))
   }
 
+  writeU32(value: number): void {
+    if (value < 0 || value > 0xFFFFFFFF) throw new Error('u32 out of range')
+    this.writeUVarInt(value >>> 0)
+  }
+
+  writeI32(value: number): void {
+    if (value < -0x80000000 || value > 0x7FFFFFFF) throw new Error('i32 out of range')
+    this.writeSVarInt(BigInt(value))
+  }
+
+  writeU16(value: number): void {
+    if (value < 0 || value > 0xFFFF) throw new Error('u16 out of range')
+    this.writeUVarInt(value & 0xFFFF)
+  }
+
+  writeI16(value: number): void {
+    if (value < -0x8000 || value > 0x7FFF) throw new Error('i16 out of range')
+    this.writeSVarInt(BigInt(value))
+  }
+
+  writeU8(value: number): void {
+    this.writeByte(value & 0xFF)
+  }
+
+  writeI8(value: number): void {
+    this.writeByte((value ^ 0x80) & 0xFF)
+  }
+
+  writeF32(value: number): void {
+    this.scratchView.setFloat32(0, value, true)
+    let bits = this.scratchView.getUint32(0, true)
+    if ((bits & 0x80000000) !== 0) {
+      bits = (~bits) >>> 0
+    } else {
+      bits ^= 0x80000000
+    }
+    if (value === 0) bits = 0x80000000
+    this.writeByte((bits >> 24) & 0xFF)
+    this.writeByte((bits >> 16) & 0xFF)
+    this.writeByte((bits >> 8) & 0xFF)
+    this.writeByte(bits & 0xFF)
+  }
+
   writeF64(value: number): void {
     this.scratchView.setFloat64(0, value, true)
     let bits = this.scratchView.getBigUint64(0, true)

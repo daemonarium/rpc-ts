@@ -45,6 +45,74 @@ export class CircularBufferReader {
     return this.readSVarInt()
   }
 
+  readU32(): number {
+    const result = this.buffer.peekUVarInt32(this.readOffset)
+    if (result.bytesRead === 0) {
+      throw new Error('Unexpected end of buffer while reading uvarint32')
+    }
+    this.readOffset += result.bytesRead
+    return result.value
+  }
+
+  readI32(): number {
+    const result = this.buffer.peekSVarInt32(this.readOffset)
+    if (result.bytesRead === 0) {
+      throw new Error('Unexpected end of buffer while reading svarint32')
+    }
+    this.readOffset += result.bytesRead
+    return result.value
+  }
+
+  readU16(): number {
+    const result = this.buffer.peekUVarInt16(this.readOffset)
+    if (result.bytesRead === 0) {
+      throw new Error('Unexpected end of buffer while reading uvarint16')
+    }
+    this.readOffset += result.bytesRead
+    return result.value
+  }
+
+  readI16(): number {
+    const result = this.buffer.peekSVarInt16(this.readOffset)
+    if (result.bytesRead === 0) {
+      throw new Error('Unexpected end of buffer while reading svarint16')
+    }
+    this.readOffset += result.bytesRead
+    return result.value
+  }
+
+  readU8(): number {
+    const bytes = new Uint8Array(1)
+    const read = this.buffer.peek(this.readOffset, bytes, 1)
+    if (read !== 1) {
+      throw new Error('Unexpected end of buffer while reading u8')
+    }
+    this.readOffset += 1
+    return bytes[0]
+  }
+
+  readI8(): number {
+    const b = this.readU8()
+    return (b ^ 0x80) << 24 >> 24
+  }
+
+  readF32(): number {
+    const bytes = new Uint8Array(4)
+    const read = this.buffer.peek(this.readOffset, bytes, 4)
+    if (read !== 4) {
+      throw new Error('Unexpected end of buffer while reading float32')
+    }
+    this.readOffset += 4
+    let v = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]
+    if ((v & 0x80000000) !== 0) {
+      v ^= 0x80000000
+    } else {
+      v = (~v) >>> 0
+    }
+    this.scratchView.setUint32(0, v, true)
+    return this.scratchView.getFloat32(0, true)
+  }
+
   readF64(): number {
     // C++ writes float64 as big-endian 8 bytes after transform; decode matches circular_buffer_reader.
     const bytes = new Uint8Array(8)
