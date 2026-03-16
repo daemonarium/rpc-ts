@@ -357,7 +357,7 @@ export function registerDynamicCodecs(codecs: CodecRegistry, registry: TypeRegis
       codecs.register({
         name: type.name,
         serialize: (writer, value) => serializeValueByType(writer, registry, type, value as JsonValue),
-        deserialize: (reader, output) => deserializeValueByType(reader, registry, type, output)
+        deserialize: (reader, output) => deserializeValueByType(reader, registry, type, output),
       })
     }
   }
@@ -369,8 +369,13 @@ export function registerMessageCodecs(codecs: CodecRegistry, registry: TypeRegis
       codecs.register({
         name: type.name,
         serialize: (writer, value) => serializeValueByType(writer, registry, type, value as JsonValue),
-        deserialize: (reader, output) => deserializeValueByType(reader, registry, type, output)
+        deserialize: (reader, output) => deserializeValueByType(reader, registry, type, output),
       })
     }
   }
+}
+
+export function registerAllRuntimeCodecs(codecs: CodecRegistry, registry: TypeRegistry): void {
+  registerDynamicCodecs(codecs, registry)
+  registerMessageCodecs(codecs, registry)
 }
