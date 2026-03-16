@@ -32,14 +32,14 @@ export interface RpcError {
  * Create TypeDescription for rpc_request (request_id: uint64, function_id: uint64).
  */
 function createRpcRequestType(registry: TypeRegistry): TypeDescription {
-  const uint = registry.getTypeByName('uint')
-  if (!uint) throw new Error('Registry must have uint type')
+  const uint32 = registry.getTypeByName('uint32')
+  if (!uint32) throw new Error('Registry must have uint32 type')
   return TypeDescription.create({
     name: RPC_REQUEST_TYPE,
     kind: TypeKind.Message,
     members: [
-      { name: 'request_id', type: uint, annotations: [] },
-      { name: 'function_id', type: uint, annotations: [] }
+      { name: 'request_id', type: uint32, annotations: [] },
+      { name: 'function_id', type: uint32, annotations: [] }
     ]
   })
 }
@@ -48,14 +48,14 @@ function createRpcRequestType(registry: TypeRegistry): TypeDescription {
  * Create TypeDescription for rpc_response (request_id: uint64, success: bool).
  */
 function createRpcResponseType(registry: TypeRegistry): TypeDescription {
-  const uint = registry.getTypeByName('uint')
+  const uint32 = registry.getTypeByName('uint32')
   const bool = registry.getTypeByName('bool')
-  if (!uint || !bool) throw new Error('Registry must have uint and bool types')
+  if (!uint32 || !bool) throw new Error('Registry must have uint32 and bool types')
   return TypeDescription.create({
     name: RPC_RESPONSE_TYPE,
     kind: TypeKind.Message,
     members: [
-      { name: 'request_id', type: uint, annotations: [] },
+      { name: 'request_id', type: uint32, annotations: [] },
       { name: 'success', type: bool, annotations: [] }
     ]
   })
@@ -65,15 +65,15 @@ function createRpcResponseType(registry: TypeRegistry): TypeDescription {
  * Create TypeDescription for rpc_error (request_id: uint64, success: bool, error: string).
  */
 function createRpcErrorType(registry: TypeRegistry): TypeDescription {
-  const uint = registry.getTypeByName('uint')
+  const uint32 = registry.getTypeByName('uint32')
   const bool = registry.getTypeByName('bool')
   const stringType = registry.getTypeByName('string')
-  if (!uint || !bool || !stringType) throw new Error('Registry must have uint, bool and string types')
+  if (!uint32 || !bool || !stringType) throw new Error('Registry must have uint32, bool and string types')
   return TypeDescription.create({
     name: RPC_ERROR_TYPE,
     kind: TypeKind.Message,
     members: [
-      { name: 'request_id', type: uint, annotations: [] },
+      { name: 'request_id', type: uint32, annotations: [] },
       { name: 'success', type: bool, annotations: [] },
       { name: 'error', type: stringType, annotations: [] }
     ]

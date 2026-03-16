@@ -6,7 +6,7 @@ import {
   deserializeTypedJson
 } from './valueSerialization.js'
 
-export function deserializeTypeRegistry(serialized: Uint8Array): TypeRegistry {
+export function deserializeTypeRegistry(serialized: Uint8Array): TypeRegistry {    
   const typeRegistrySerializationRegistry = createTypeRegistrySerializationRegistry()
   const codecs = new CodecRegistry()  
   registerDynamicCodecs(codecs, typeRegistrySerializationRegistry)
@@ -80,7 +80,7 @@ export function createTypeRegistrySerializationRegistry(): TypeRegistry {
   const enumMemberEntryType = TypeDescription.create({ 
     name: 'enum_member', kind: TypeKind.Object, members: [
       { name: 'name', type: registry.getTypeByName('string'), annotations: [] },
-      { name: 'value', type: registry.getTypeByName('uint'), annotations: [] }
+      { name: 'value', type: registry.getTypeByName('uint32'), annotations: [] }
     ] 
   })
   const enumMembersType = TypeDescription.create({ 
@@ -98,7 +98,7 @@ export function createTypeRegistrySerializationRegistry(): TypeRegistry {
   const typeDescriptionType = TypeDescription.create({ 
     name: 'type_description', kind: TypeKind.DynamicObject, members: [
       { name: 'name', type: registry.getTypeByName('string'), annotations: [] },
-      { name: 'kind', type: registry.getTypeByName('uint'), annotations: [] },
+      { name: 'kind', type: registry.getTypeByName('uint8'), annotations: [] },
       { name: 'members', type: membersType, annotations: [] },
       { name: 'item', type: registry.getTypeByName('pointer'), annotations: [] },
       { name: 'key', type: registry.getTypeByName('pointer'), annotations: [] },

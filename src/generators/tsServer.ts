@@ -28,12 +28,18 @@ function getTypeString(type: TypeDescription, varNameMap: Map<TypeDescription, s
   switch (type.kind) {
     case TypeKind.Void:
       return 'void'
-    case TypeKind.UnsignedInteger:
+    case TypeKind.UnsignedInteger8:
+    case TypeKind.SignedInteger8:
+    case TypeKind.UnsignedInteger16:
+    case TypeKind.SignedInteger16:
+    case TypeKind.UnsignedInteger32:
+    case TypeKind.SignedInteger32:
+    case TypeKind.FloatingPoint32:
+    case TypeKind.FloatingPoint64:
       return 'number'
-    case TypeKind.SignedInteger:
-      return 'number'
-    case TypeKind.FloatingPoint:
-      return 'number'
+    case TypeKind.UnsignedInteger64:
+    case TypeKind.SignedInteger64:
+      return 'bigint'
     case TypeKind.Boolean:
       return 'boolean'
     case TypeKind.String:

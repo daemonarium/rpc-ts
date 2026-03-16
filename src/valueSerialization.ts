@@ -35,13 +35,34 @@ export const deserializeTypedJson = (reader: Reader, registry: TypeRegistry, typ
 
 export const serializeValueByType = (writer: Writer, registry: TypeRegistry, type: TypeDescription, value: JsonValue): void => {
   switch (type.kind) {
-    case TypeKind.UnsignedInteger:
+    case TypeKind.UnsignedInteger8:
+      writer.writeU8(Number(toNumber(value, false)) & 0xff)
+      break
+    case TypeKind.SignedInteger8:
+      writer.writeI8(toNumber(value, true) << 24 >> 24)
+      break
+    case TypeKind.UnsignedInteger16:
+      writer.writeU16(Number(toNumber(value, false)) & 0xffff)
+      break
+    case TypeKind.SignedInteger16:
+      writer.writeI16(toNumber(value, true) << 16 >> 16)
+      break
+    case TypeKind.UnsignedInteger32:
+      writer.writeU32(Number(toNumber(value, false)) >>> 0)
+      break
+    case TypeKind.SignedInteger32:
+      writer.writeI32(toNumber(value, true) | 0)
+      break
+    case TypeKind.UnsignedInteger64:
       writer.writeU64(toBigInt(value, false))
       break
-    case TypeKind.SignedInteger:
+    case TypeKind.SignedInteger64:
       writer.writeI64(toBigInt(value, true))
       break
-    case TypeKind.FloatingPoint:
+    case TypeKind.FloatingPoint32:
+      writer.writeF32(assertNumber(value))
+      break
+    case TypeKind.FloatingPoint64:
       writer.writeF64(assertNumber(value))
       break
     case TypeKind.Boolean:
@@ -123,11 +144,25 @@ const serializeObject = (writer: Writer, registry: TypeRegistry, type: TypeDescr
 
 export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, type: TypeDescription, output: (value: JsonValue) => void): void => {
   switch (type.kind) {
-    case TypeKind.UnsignedInteger:
+    case TypeKind.UnsignedInteger8:
+      return output(reader.readU8())
+    case TypeKind.SignedInteger8:
+      return output(reader.readI8())
+    case TypeKind.UnsignedInteger16:
+      return output(reader.readU16())
+    case TypeKind.SignedInteger16:
+      return output(reader.readI16())
+    case TypeKind.UnsignedInteger32:
+      return output(reader.readU32())
+    case TypeKind.SignedInteger32:
+      return output(reader.readI32())
+    case TypeKind.UnsignedInteger64:
       return output(reader.readU64())
-    case TypeKind.SignedInteger:
+    case TypeKind.SignedInteger64:
       return output(reader.readI64())
-    case TypeKind.FloatingPoint:
+    case TypeKind.FloatingPoint32:
+      return output(reader.readF32())
+    case TypeKind.FloatingPoint64:
       return output(reader.readF64())
     case TypeKind.Boolean:
       return output(reader.readBool())

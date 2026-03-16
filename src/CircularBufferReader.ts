@@ -145,32 +145,28 @@ export class CircularBufferReader {
   }
 
   readString(): string {
-    const length = Number(this.readUVarInt())
+    const length = this.readU32()
     const bytes = this.readBytes(length)
     return this.textDecoder.decode(bytes)
   }
 
   readBinary(): Uint8Array {
-    const length = Number(this.readUVarInt())
+    const length = this.readU32()
     return this.readBytes(length)
   }
 
   readLength(): number {
-    const length = this.readUVarInt()
-    if (length > Number.MAX_SAFE_INTEGER) {
-      throw new Error('Length exceeds MAX_SAFE_INTEGER')
-    }
-    return Number(length)
+    return this.readU32()
   }
 
   readTyped<T>(output: (value: T) => void): void {
-    const index = Number(this.readUVarInt())
+    const index = this.readU32()
     const codec = this.codecs.getByIndex(index)
     codec.deserialize(this as any, output)
   }
 
   readPointer<T>(assign: (value: T) => void, readLater: (output: (value: T) => void) => void): void {
-    const delta = Number(this.readSVarInt())
+    const delta = this.readI32()
     if (delta === 0) {
       assign(null as any)
       return

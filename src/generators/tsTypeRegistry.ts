@@ -43,19 +43,27 @@ export function getTypeVariableName(type: TypeDescription, index: number, allTyp
 export function renderKind(kind: TypeKind): string {
   switch (kind) {
     case TypeKind.Void: return 'TypeKind.Void'
-    case TypeKind.UnsignedInteger: return 'TypeKind.UnsignedInteger'
-    case TypeKind.SignedInteger: return 'TypeKind.SignedInteger'
-    case TypeKind.FloatingPoint: return 'TypeKind.FloatingPoint'
     case TypeKind.Boolean: return 'TypeKind.Boolean'
-    case TypeKind.String: return 'TypeKind.String'
-    case TypeKind.Binary: return 'TypeKind.Binary'
+    case TypeKind.UnsignedInteger8: return 'TypeKind.UnsignedInteger8'
+    case TypeKind.SignedInteger8: return 'TypeKind.SignedInteger8'
+    case TypeKind.UnsignedInteger16: return 'TypeKind.UnsignedInteger16'
+    case TypeKind.SignedInteger16: return 'TypeKind.SignedInteger16'
+    case TypeKind.UnsignedInteger32: return 'TypeKind.UnsignedInteger32'
+    case TypeKind.SignedInteger32: return 'TypeKind.SignedInteger32'
+    case TypeKind.UnsignedInteger64: return 'TypeKind.UnsignedInteger64'
+    case TypeKind.SignedInteger64: return 'TypeKind.SignedInteger64'
+    case TypeKind.FloatingPoint32: return 'TypeKind.FloatingPoint32'
+    case TypeKind.FloatingPoint64: return 'TypeKind.FloatingPoint64'
     case TypeKind.Enum: return 'TypeKind.Enum'
     case TypeKind.Array: return 'TypeKind.Array'
+    case TypeKind.String: return 'TypeKind.String'
+    case TypeKind.Binary: return 'TypeKind.Binary'
+    case TypeKind.Map: return 'TypeKind.Map'
     case TypeKind.Object: return 'TypeKind.Object'
     case TypeKind.DynamicObject: return 'TypeKind.DynamicObject'
     case TypeKind.Message: return 'TypeKind.Message'
+    case TypeKind.Exception: return 'TypeKind.Exception'
     case TypeKind.Pointer: return 'TypeKind.Pointer'
-    case TypeKind.Map: return 'TypeKind.Map'
     case TypeKind.Function: return 'TypeKind.Function'
     case TypeKind.Method: return 'TypeKind.Method'
     default: return 'TypeKind.Void'
@@ -107,10 +115,17 @@ function getTypeScriptTypeForMember(type: TypeDescription, varNameMap: Map<TypeD
   switch (type.kind) {
     case TypeKind.Void:
       return 'void'
-    case TypeKind.UnsignedInteger:
-    case TypeKind.SignedInteger:
-    case TypeKind.FloatingPoint:
-      return 'number'
+    case TypeKind.UnsignedInteger8:
+    case TypeKind.SignedInteger8:
+    case TypeKind.UnsignedInteger16:
+    case TypeKind.SignedInteger16:
+    case TypeKind.UnsignedInteger32:
+    case TypeKind.SignedInteger32:
+    case TypeKind.UnsignedInteger64:
+    case TypeKind.SignedInteger64:
+    case TypeKind.FloatingPoint32:
+    case TypeKind.FloatingPoint64:
+      return type.kind === TypeKind.UnsignedInteger64 || type.kind === TypeKind.SignedInteger64 ? 'bigint' : 'number'
     case TypeKind.Boolean:
       return 'boolean'
     case TypeKind.String:

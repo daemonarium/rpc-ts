@@ -264,11 +264,25 @@ function getCppType(type: TypeDescription): string {
   switch (type.kind) {
     case TypeKind.Void:
       return 'void'
-    case TypeKind.UnsignedInteger:
+    case TypeKind.UnsignedInteger8:
+      return 'std::uint8_t'
+    case TypeKind.SignedInteger8:
+      return 'std::int8_t'
+    case TypeKind.UnsignedInteger16:
+      return 'std::uint16_t'
+    case TypeKind.SignedInteger16:
+      return 'std::int16_t'
+    case TypeKind.UnsignedInteger32:
+      return 'std::uint32_t'
+    case TypeKind.SignedInteger32:
+      return 'std::int32_t'
+    case TypeKind.UnsignedInteger64:
       return 'std::uint64_t'
-    case TypeKind.SignedInteger:
+    case TypeKind.SignedInteger64:
       return 'std::int64_t'
-    case TypeKind.FloatingPoint:
+    case TypeKind.FloatingPoint32:
+      return 'float'
+    case TypeKind.FloatingPoint64:
       return 'double'
     case TypeKind.Boolean:
       return 'bool'
@@ -312,9 +326,16 @@ function getDefaultValue(cppType: string): string | undefined {
       return undefined
     case 'bool':
       return 'false'
+    case 'std::uint8_t':
+    case 'std::int8_t':
+    case 'std::uint16_t':
+    case 'std::int16_t':
+    case 'std::uint32_t':
+    case 'std::int32_t':
     case 'std::uint64_t':
     case 'std::int64_t':
       return '0'
+    case 'float':
     case 'double':
       return '0.0'
     case 'std::string':

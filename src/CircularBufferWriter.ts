@@ -99,7 +99,7 @@ export class CircularBufferWriter {
 
   writeString(value: string): void {
     const encoded = this.textEncoder.encode(value)
-    this.writeUVarInt(BigInt(encoded.length))
+    this.writeU32(encoded.length)
     this.offset += this.buffer.poke(this.offset, encoded, encoded.length)
   }
 
@@ -107,7 +107,7 @@ export class CircularBufferWriter {
     const bytes = value instanceof ArrayBuffer
       ? new Uint8Array(value)
       : new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
-    this.writeUVarInt(BigInt(bytes.length))
+    this.writeU32(bytes.length)
     this.offset += this.buffer.poke(this.offset, bytes, bytes.length)
   }
 
@@ -115,7 +115,7 @@ export class CircularBufferWriter {
     if (length < 0) {
       throw new Error('Length cannot be negative')
     }
-    this.writeUVarInt(BigInt(length))
+    this.writeU32(length)
   }
 
   writeTyped(value: TypedValue): void {
@@ -123,30 +123,30 @@ export class CircularBufferWriter {
       throw new Error('Typed value must provide _type string')
     }
     const index = this.codecs.getIndexOrThrow(value._type)
-    this.writeUVarInt(BigInt(index))
+    this.writeU32(index)
     const codec = this.codecs.getByIndex(index)
     codec.serialize(this as any, value)
   }
 
   writePointer(value: unknown, writeLater: WriteLater): void {
     if (value === null) {
-      this.writeSVarInt(0n)
+      this.writeI32(0)
       return
     }
     const existingIndex = this.writtenPointers.indexOf(value)
     if (existingIndex !== -1) {
       const delta = existingIndex - this.writtenPointers.length
-      this.writeSVarInt(BigInt(delta))
+      this.writeI32(delta)
       return
     }
     const pendingIndex = this.pendingPointers.findIndex(entry => entry.value === value)
     if (pendingIndex !== -1) {
       const delta = pendingIndex + 1
-      this.writeSVarInt(BigInt(delta))
+      this.writeI32(delta)
       return
     }
     const delta = this.pendingPointers.length + 1
-    this.writeSVarInt(BigInt(delta))
+    this.writeI32(delta)
     this.pendingPointers.push({ value, writeLater })
   }
 
