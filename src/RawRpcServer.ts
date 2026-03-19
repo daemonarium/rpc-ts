@@ -5,6 +5,7 @@ import { TypeKind } from './typeDescription.js'
 import { deserializeValueByType, serializeValueByType, type JsonValue } from './valueSerialization.js'
 
 type RpcHandler = (reader: Reader, writer: Writer, requestId: number) => Promise<void>
+type RpcErrorHandler = (requestId: number, error: unknown) => void
 
 export interface MethodDescription {
   parameterTypes: TypeDescription[]
@@ -17,11 +18,13 @@ export class RawRpcServer {
   private readonly typeRegistry: TypeRegistry
   private readonly beforeSend: () => void
   private readonly sender: () => void
+  private readonly onError?: RpcErrorHandler
 
-  constructor(typeRegistry: TypeRegistry, beforeSend: () => void, sender: () => void) {
+  constructor(typeRegistry: TypeRegistry, beforeSend: () => void, sender: () => void, onError?: RpcErrorHandler) {
     this.typeRegistry = typeRegistry
     this.beforeSend = beforeSend
     this.sender = sender
+    this.onError = onError
     this.registerFromRegistry()
   }
 
@@ -190,6 +193,10 @@ export class RawRpcServer {
       writer.writeRest()
       this.sender()
     } catch (error) {
+      if (this.onError) {
+        this.onError(requestId, error)
+        return
+      }
       this.beforeSend()
       writer.writeU64(requestId)
       writer.writeBool(false)

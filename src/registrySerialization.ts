@@ -26,7 +26,7 @@ export function createTypeRegistryCodecs(): CodecRegistry {
   registerDynamicCodecs(codecs, typeRegistrySerializationRegistry)
   typeRegistryCodecs = codecs
 
-  codecs.replace({
+  codecs.typed.replace({
     name: 'type_description',
     serialize: (writer, value) => serializeValueByType(
       writer, typeRegistrySerializationRegistry, typeRegistrySerializationRegistry.getTypeByName('type_registry'), 

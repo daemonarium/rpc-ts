@@ -1,6 +1,9 @@
 export class RpcException extends Error {
-  constructor(message: string) {
+  readonly typeName?: string
+
+  constructor(message: string, typeName?: string) {
     super(message)
     this.name = 'RpcException'
+    this.typeName = typeName
   }
 }

@@ -30,7 +30,22 @@ export class SocketRpcClient implements RpcClient {
     this.messageChannel.registerMessageType(RPC_RESPONSE_TYPE)
     this.messageChannel.registerMessageType(RPC_ERROR_TYPE)
 
-    this.messageChannel.onMessage(RPC_RESPONSE_TYPE, (msg: { request_id: number; success: boolean }, payloadSize: number) => {
+    for (const type of typeRegistry.getTypes()) {
+      if (type.kind !== TypeKind.Exception) continue
+      this.messageChannel.registerExceptionType(
+        type.name,
+        (w, v) => serializeValueByType(w as any, typeRegistry, type, v as JsonValue),
+        (r) => {
+          let result: unknown
+          deserializeValueByType(r as any, typeRegistry, type, (v) => {
+            result = v
+          })
+          return result
+        }
+      )
+    }
+
+    this.messageChannel.onMessage(RPC_RESPONSE_TYPE, (msg: { request_id: number }, payloadSize: number) => {
       const pending = this.responseHandlers.get(msg.request_id)
       if (!pending) throw new Error(`Response handler ${msg.request_id} not found`)
       this.responseHandlers.delete(msg.request_id)
@@ -46,11 +61,14 @@ export class SocketRpcClient implements RpcClient {
       pending.resolve(result)
     })
 
-    this.messageChannel.onMessage(RPC_ERROR_TYPE, (msg: { request_id: number; success: boolean; error: string }) => {
+    this.messageChannel.onMessage(RPC_ERROR_TYPE, (msg: { request_id: number }) => {
       const pending = this.responseHandlers.get(msg.request_id)
       if (!pending) throw new Error(`Response handler ${msg.request_id} not found`)
       this.responseHandlers.delete(msg.request_id)
-      pending.reject(new RpcException(msg.error))
+      const exc = this.messageChannel.getReader().readException()
+      this.messageChannel.getReader().readRest()
+      const message = (exc.value as { what?: string }).what ?? String(exc.value)
+      pending.reject(new RpcException(message, exc.typeName))
     })
 
     socket.setOptions?.({

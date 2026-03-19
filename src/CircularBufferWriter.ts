@@ -118,13 +118,30 @@ export class CircularBufferWriter {
     this.writeU32(length)
   }
 
+  writeException(typeName: string, value: unknown): void {
+    let index: number
+    try {
+      index = this.codecs.exceptions.getIndexOrThrow(typeName)
+    } catch {
+      index = this.codecs.exceptions.getIndexOrThrow('runtime_error')
+      typeName = 'runtime_error'
+      value = {
+        _type: 'runtime_error',
+        what: value instanceof Error ? value.message : String(value)
+      }
+    }
+    this.writeU32(index)
+    const codec = this.codecs.exceptions.getByIndex(index)
+    codec.serialize(this as any, value)
+  }
+
   writeTyped(value: TypedValue): void {
     if (!value || typeof value._type !== 'string') {
       throw new Error('Typed value must provide _type string')
     }
-    const index = this.codecs.getIndexOrThrow(value._type)
+    const index = this.codecs.typed.getIndexOrThrow(value._type)
     this.writeU32(index)
-    const codec = this.codecs.getByIndex(index)
+    const codec = this.codecs.typed.getByIndex(index)
     codec.serialize(this as any, value)
   }
 

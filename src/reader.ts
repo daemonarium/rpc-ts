@@ -130,7 +130,7 @@ export class Reader {
 
   readTyped<T>(output: (value: T) => void): void {
     const index = this.readU32()
-    const codec = this.codecs.getByIndex(index)
+    const codec = this.codecs.typed.getByIndex(index)
     codec.deserialize(this, output)
   }
 
@@ -148,7 +148,7 @@ export class Reader {
       assign(this.readPointers[index] as T)
       return
     }
-    const offset = delta - 1; // decrement delta, because 0 is null
+    const offset = delta - 1 // decrement delta, because 0 is null
     if (offset < this.pendingPointers.length) {
       this.pendingPointers[offset].assignments.push(value => assign(value as T))
       return

@@ -124,9 +124,9 @@ export class Writer {
     if (!value || typeof value._type !== 'string') {
       throw new Error('Typed value must provide _type string')
     }
-    const index = this.codecs.getIndexOrThrow(value._type)
+    const index = this.codecs.typed.getIndexOrThrow(value._type)
     this.writeU32(index)
-    const codec = this.codecs.getByIndex(index)
+    const codec = this.codecs.typed.getByIndex(index)
     codec.serialize(this, value)
   }
 

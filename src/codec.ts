@@ -15,7 +15,7 @@ export interface Codec<T = unknown> {
   deserialize: Deserializer<T>
 }
 
-export class CodecRegistry {
+export class CodecChannel {
   private codecs: Codec[] = []
   private indexByName = new Map<string, number>()
 
@@ -52,5 +52,11 @@ export class CodecRegistry {
   replace<T>(codec: Codec<T>): void {
     this.codecs[this.indexByName.get(codec.name)] = codec
   }
+}
+
+export class CodecRegistry {
+  readonly typed = new CodecChannel()
+  readonly messages = new CodecChannel()
+  readonly exceptions = new CodecChannel()
 }
 

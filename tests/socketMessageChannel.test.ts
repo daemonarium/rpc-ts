@@ -50,8 +50,8 @@ interface Pong {
 }
 
 function registerPingPongCodecs(codecs: CodecRegistry): void {
-  if (!codecs.has('ping')) {
-    codecs.register({
+  if (!codecs.messages.has('ping')) {
+    codecs.messages.register({
       name: 'ping',
       serialize: (w, v) => {
         const ping = v as Ping
@@ -63,8 +63,8 @@ function registerPingPongCodecs(codecs: CodecRegistry): void {
       },
     })
   }
-  if (!codecs.has('pong')) {
-    codecs.register({
+  if (!codecs.messages.has('pong')) {
+    codecs.messages.register({
       name: 'pong',
       serialize: (w, v) => {
         const pong = v as Pong

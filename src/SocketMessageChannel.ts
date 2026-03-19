@@ -22,7 +22,6 @@ export interface SocketMessageChannelSocket extends Socket {
 
 interface DispatchEntry {
   typeName: string
-  codec: { serialize: (w: unknown, v: unknown) => void; deserialize: (r: unknown, out: (v: unknown) => void) => void }
   handler?: (msg: unknown, payloadSize?: number) => void
 }
 
@@ -33,7 +32,6 @@ export class SocketMessageChannel {
   private readonly writer: CircularBufferWriter
   private readonly codecs: CodecRegistry
   private readonly dispatchTable: DispatchEntry[] = []
-  private readonly typeNameToIndex = new Map<string, number>()
 
   constructor(socket: SocketMessageChannelSocket, codecs: CodecRegistry) {
     this.socket = socket
@@ -47,13 +45,25 @@ export class SocketMessageChannel {
    * Index is assigned in registration order (use same order as cpp-rpc for RPC types).
    */
   registerMessageType(typeName: string): void {
-    if (this.typeNameToIndex.has(typeName)) {
-      return
+    if (!this.codecs.messages.has(typeName)) {
+      throw new Error(`Message codec ${typeName} not registered`)
     }
-    const codec = this.codecs.getByIndex(this.codecs.getIndexOrThrow(typeName))
-    const index = this.dispatchTable.length
-    this.dispatchTable.push({ typeName, codec })
-    this.typeNameToIndex.set(typeName, index)
+    const wireIndex = this.codecs.messages.getIndexOrThrow(typeName)
+    if (this.dispatchTable[wireIndex]) return
+    this.dispatchTable[wireIndex] = { typeName }
+  }
+
+  registerExceptionType(
+    typeName: string,
+    serializer: (writer: CircularBufferWriter, value: unknown) => void,
+    deserializer: (reader: CircularBufferReader) => unknown
+  ): void {
+    if (this.codecs.exceptions.has(typeName)) return
+    this.codecs.exceptions.register({
+      name: typeName,
+      serialize: (w, v) => serializer(w as unknown as CircularBufferWriter, v),
+      deserialize: (r, out) => out(deserializer(r as unknown as CircularBufferReader))
+    })
   }
 
   /**
@@ -68,14 +78,11 @@ export class SocketMessageChannel {
    * Begin sending a message; caller may write payload to returned writer, then call commitSend().
    */
   beginSend(typeName: string, value: object): CircularBufferWriter {
-    const index = this.typeNameToIndex.get(typeName)
-    if (index === undefined) {
-      throw new Error(`Message type ${typeName} not registered for sending`)
-    }
+    const wireIndex = this.codecs.messages.getIndexOrThrow(typeName)
     this.socket.outputBuffer.poke(0, new Uint8Array(LENGTH_SIZE), LENGTH_SIZE)
     this.writer.offset = LENGTH_SIZE
-    this.writer.writeU64(index)
-    const codec = this.codecs.getByIndex(this.codecs.getIndexOrThrow(typeName))
+    this.writer.writeU64(wireIndex)
+    const codec = this.codecs.messages.getByIndex(wireIndex)
     codec.serialize(this.writer as any, value)
     this.writer.writeRest()
     return this.writer
@@ -102,11 +109,8 @@ export class SocketMessageChannel {
    */
   onMessage(typeName: string, handler: (msg: unknown, payloadSize: number) => void): void
   onMessage(typeName: string, handler: (msg: unknown, payloadSize?: number) => void): void {
-    const index = this.typeNameToIndex.get(typeName)
-    if (index === undefined) {
-      throw new Error(`Message type ${typeName} not registered`)
-    }
-    const entry = this.dispatchTable[index]
+    const wireIndex = this.codecs.messages.getIndexOrThrow(typeName)
+    const entry = this.dispatchTable[wireIndex]
     if (!entry) throw new Error(`Dispatch entry missing for ${typeName}`)
     entry.handler = handler
   }
@@ -145,7 +149,8 @@ export class SocketMessageChannel {
           throw new Error(`No dispatch entry for index ${typeIndex}`)
         }
         let msg: unknown
-        entry.codec.deserialize(this.reader as any, (v: unknown) => { msg = v })
+        const codec = this.codecs.messages.getByIndex(typeIndex)
+        codec.deserialize(this.reader as any, (v: unknown) => { msg = v })
         this.reader.readRest()
         const payloadSize = msgLen - this.reader.getReadOffset()
         try {

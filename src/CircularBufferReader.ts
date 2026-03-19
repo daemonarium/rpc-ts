@@ -159,9 +159,22 @@ export class CircularBufferReader {
     return this.readU32()
   }
 
+  readException(): { typeName: string, value: unknown } {
+    const index = this.readU32()
+    const codec = this.codecs.exceptions.getByIndex(index)
+    if (!codec) {
+      throw new Error(`Exception type not registered for deserialization (index ${index})`)
+    }
+    let value: unknown
+    codec.deserialize(this as any, (v) => {
+      value = v
+    })
+    return { typeName: codec.name, value }
+  }
+
   readTyped<T>(output: (value: T) => void): void {
     const index = this.readU32()
-    const codec = this.codecs.getByIndex(index)
+    const codec = this.codecs.typed.getByIndex(index)
     codec.deserialize(this as any, output)
   }
 

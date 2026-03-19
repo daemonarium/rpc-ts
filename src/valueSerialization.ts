@@ -113,6 +113,9 @@ export const serializeValueByType = (writer: Writer, registry: TypeRegistry, typ
     case TypeKind.Message:
       serializeObject(writer, registry, type, value as Record<string, JsonValue>)
       break
+    case TypeKind.Exception:
+      serializeObject(writer, registry, type, value as Record<string, JsonValue>)
+      break
     case TypeKind.Pointer: {
       const typed = value as TypedValue
       if (!typed || typeof typed._type !== 'string') {
@@ -213,6 +216,19 @@ export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, t
         for (const member of flattenMembers(type)) {
           result[member.name] = undefined
           deserializeValueByType(reader, registry, member.type, (value) => result[member.name] = value)
+        }
+        reader.exitFrame()
+        output(result as TypedValue)
+        return
+      }
+    case TypeKind.Exception:
+      reader.enterFrame()
+      {
+        const result: Record<string, JsonValue> = { _type: type.name }
+        for (const member of flattenMembers(type)) {
+          deserializeValueByType(reader, registry, member.type, (value) => {
+            result[member.name] = value
+          })
         }
         reader.exitFrame()
         output(result as TypedValue)
@@ -354,7 +370,7 @@ const extractEntries = (value: JsonValue): Array<[JsonValue, JsonValue]> => {
 export function registerDynamicCodecs(codecs: CodecRegistry, registry: TypeRegistry): void {
   for(const type of registry.getTypes()) {
     if(type.kind === TypeKind.DynamicObject) {
-      codecs.register({
+      codecs.typed.register({
         name: type.name,
         serialize: (writer, value) => serializeValueByType(writer, registry, type, value as JsonValue),
         deserialize: (reader, output) => deserializeValueByType(reader, registry, type, output),
@@ -366,7 +382,7 @@ export function registerDynamicCodecs(codecs: CodecRegistry, registry: TypeRegis
 export function registerMessageCodecs(codecs: CodecRegistry, registry: TypeRegistry): void {
   for(const type of registry.getTypes()) {
     if(type.kind === TypeKind.Message) {
-      codecs.register({
+      codecs.messages.register({
         name: type.name,
         serialize: (writer, value) => serializeValueByType(writer, registry, type, value as JsonValue),
         deserialize: (reader, output) => deserializeValueByType(reader, registry, type, output),

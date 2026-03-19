@@ -19,13 +19,10 @@ export interface RpcRequest {
 
 export interface RpcResponse {
   request_id: number
-  success: boolean
 }
 
 export interface RpcError {
   request_id: number
-  success: boolean
-  error: string
 }
 
 /**
@@ -45,37 +42,31 @@ function createRpcRequestType(registry: TypeRegistry): TypeDescription {
 }
 
 /**
- * Create TypeDescription for rpc_response (request_id: uint64, success: bool).
+ * Create TypeDescription for rpc_response (request_id: uint64).
  */
 function createRpcResponseType(registry: TypeRegistry): TypeDescription {
   const uint32 = registry.getTypeByName('uint32')
-  const bool = registry.getTypeByName('bool')
-  if (!uint32 || !bool) throw new Error('Registry must have uint32 and bool types')
+  if (!uint32) throw new Error('Registry must have uint32 type')
   return TypeDescription.create({
     name: RPC_RESPONSE_TYPE,
     kind: TypeKind.Message,
     members: [
-      { name: 'request_id', type: uint32, annotations: [] },
-      { name: 'success', type: bool, annotations: [] }
+      { name: 'request_id', type: uint32, annotations: [] }
     ]
   })
 }
 
 /**
- * Create TypeDescription for rpc_error (request_id: uint64, success: bool, error: string).
+ * Create TypeDescription for rpc_error (request_id: uint64).
  */
 function createRpcErrorType(registry: TypeRegistry): TypeDescription {
   const uint32 = registry.getTypeByName('uint32')
-  const bool = registry.getTypeByName('bool')
-  const stringType = registry.getTypeByName('string')
-  if (!uint32 || !bool || !stringType) throw new Error('Registry must have uint32, bool and string types')
+  if (!uint32) throw new Error('Registry must have uint32 type')
   return TypeDescription.create({
     name: RPC_ERROR_TYPE,
     kind: TypeKind.Message,
     members: [
-      { name: 'request_id', type: uint32, annotations: [] },
-      { name: 'success', type: bool, annotations: [] },
-      { name: 'error', type: stringType, annotations: [] }
+      { name: 'request_id', type: uint32, annotations: [] }
     ]
   })
 }
@@ -103,10 +94,10 @@ export function ensureRpcTypesInRegistry(registry: TypeRegistry): void {
  */
 export function ensureRpcCodecs(codecs: CodecRegistry, registry: TypeRegistry): void {
   for (const name of [RPC_REQUEST_TYPE, RPC_RESPONSE_TYPE, RPC_ERROR_TYPE]) {
-    if (codecs.has(name)) continue
+    if (codecs.messages.has(name)) continue
     const type = registry.getTypeByName(name)
     if (!type) throw new Error(`RPC type ${name} not in registry; call ensureRpcTypesInRegistry first`)
-    codecs.register({
+    codecs.messages.register({
       name,
       serialize: (writer, value) => serializeValueByType(writer as any, registry, type, value as JsonValue),
       deserialize: (reader, output) => deserializeValueByType(reader as any, registry, type, output)
