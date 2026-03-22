@@ -8,6 +8,13 @@ export interface GlueCodeGenerator {
 
 export const glueCodeGenerators: GlueCodeGenerator[] = [
   {
+    name: 'C++ Types',
+    generate: async (registry, options) => {
+      const { generateCppTypesCode } = await import('./cppTypes.js')
+      return generateCppTypesCode(registry, options)
+    }
+  },
+  {
     name: 'C++ Client',
     generate: async (registry, options) => {
       const { generateCppGlueCode } = await import('./cppClient.js')

@@ -32,8 +32,6 @@ function isTupleType(type: TypeDescription): boolean {
 export function generateCppServerCode(registry: TypeRegistry, options: GeneratorOptions = {}): string {
   const namespace = options.namespace
   const types = registry.getTypes()
-
-  const enums = types.filter(type => type.kind === TypeKind.Enum)
   const objects = types.filter(type => {
     if (type.kind !== TypeKind.Object && type.kind !== TypeKind.DynamicObject && type.kind !== TypeKind.Message) {
       return false
@@ -54,7 +52,6 @@ export function generateCppServerCode(registry: TypeRegistry, options: Generator
   code += '#include <string>\n'
   code += '#include <vector>\n'
   code += '#include <map>\n'
-  code += '#include <type_traits>\n'
   if (usesPair) {
     code += '#include <utility>\n'
   }
@@ -64,28 +61,12 @@ export function generateCppServerCode(registry: TypeRegistry, options: Generator
   code += '\n'
   code += '#include "serialization/promise.hpp"\n'
   code += '#include "serialization/annotations.hpp"\n'
-  code += '#include "serialization/type_description.hpp"\n'
-  code += '#include "serialization/type_registry.hpp"\n'
   code += '#include "serialization/rpc_server.hpp"\n'
+  code += '#include "rpc_types.hpp"\n'
   code += '\n'
 
   if (namespace) {
     code += `namespace ${namespace} {\n\n`
-  }
-
-  const usesBinary = types.some(type => containsKind(type, TypeKind.Binary))
-  if (usesBinary) {
-    code += 'using binary = std::vector<std::uint8_t>;\n\n'
-  }
-
-  for (const enumType of enums) {
-    code += renderEnum(enumType)
-    code += '\n'
-  }
-
-  for (const objectType of objects) {
-    code += renderObject(objectType)
-    code += '\n'
   }
 
   if (standaloneFunctions.length > 0) {
@@ -97,62 +78,12 @@ export function generateCppServerCode(registry: TypeRegistry, options: Generator
   }
 
   code += renderRegisterRpc(objects)
-  code += '\n'
-  code += renderRegisterTypes([...objects, ...enums])
 
   if (namespace) {
     code += `\n} // namespace ${namespace}\n`
   }
 
   return code
-}
-
-function renderEnum(enumType: TypeDescription): string {
-  const members = enumType.enumMembers || []
-  let result = `enum class ${enumType.name} {\n`
-  members.forEach((member, index) => {
-    const lineEnd = index === members.length - 1 ? '\n' : ',\n'
-    result += `  ${member.name} = ${member.value}${lineEnd}`
-  })
-  result += '};\n'
-  return result
-}
-
-function renderObject(objectType: TypeDescription): string {
-  const dataMembers = (objectType.members || []).filter(member =>
-    member.type.kind !== TypeKind.Method && member.type.kind !== TypeKind.Function
-  )
-  const methodMembers = (objectType.members || []).filter(member => member.type.kind === TypeKind.Method)
-  const functionMembers = (objectType.members || []).filter(member => member.type.kind === TypeKind.Function)
-
-  const bases = (objectType.bases || []).map(base => base.name).filter(Boolean)
-  const baseClause = bases.length > 0 ? ` : ${bases.map(base => `public ${base}`).join(', ')}` : ''
-
-  let result = `class ${objectType.name}${baseClause} {\n`
-  result += ' public:\n'
-  result += `  ${objectType.name}() = default;\n`
-  result += '\n'
-
-  for (const member of dataMembers) {
-    const cppType = getCppType(member.type)
-    result += `  ${cppType} ${member.name}{};\n`
-  }
-  if (dataMembers.length > 0) {
-    result += '\n'
-  }
-
-  for (const member of methodMembers) {
-    result += renderMethod(member, false)
-    result += '\n'
-  }
-
-  for (const member of functionMembers) {
-    result += renderMethod(member, true)
-    result += '\n'
-  }
-
-  result += '};\n'
-  return result
 }
 
 function renderMethod(member: TypeMember, isStatic: boolean): string {
@@ -213,29 +144,8 @@ function renderRegisterRpc(objects: TypeDescription[]): string {
   result += '  // TODO: register standalone functions manually using RpcServer::register_static_method\n'
   for (const objectType of objects) {
     result += `  // Register RPC for ${objectType.name}\n`
-    result += `  if constexpr (std::is_default_constructible_v<${objectType.name}>) {\n`
-    result += `    ${objectType.name} value{};\n`
-    result += '    RpcServer::template register_recursive(value, server);\n'
-    result += '  } else {\n'
-    result += `    // TODO: provide an instance of ${objectType.name} to register\n`
-    result += '  }\n'
-  }
-  result += '}\n'
-  return result
-}
-
-function renderRegisterTypes(types: TypeDescription[]): string {
-  let result = 'template <typename Registry>\n'
-  result += 'void register_types(Registry& registry) {\n'
-  result += '  (void)registry;\n'
-  for (const type of types) {
-    const name = type.name
-    result += `  // Register type ${name}\n`
-    result += `  if constexpr (std::is_default_constructible_v<${name}>) {\n`
-    result += `    registry.register_type(serialization::type_description::create(${name}(), registry));\n`
-    result += '  } else {\n'
-    result += `    // TODO: register ${name} manually if it is not default-constructible\n`
-    result += '  }\n'
+    result += `  ${objectType.name} value{};\n`
+    result += '  RpcServer::template register_recursive(value, server);\n'
   }
   result += '}\n'
   return result
@@ -352,23 +262,5 @@ function getDefaultValue(cppType: string): string | undefined {
       }
       return `${cppType}{}`
   }
-}
-
-function containsKind(type: TypeDescription, target: TypeKind): boolean {
-  if (type.kind === target) {
-    return true
-  }
-  if (type.item && containsKind(type.item, target)) {
-    return true
-  }
-  if (type.key && containsKind(type.key, target)) {
-    return true
-  }
-  for (const member of type.members || []) {
-    if (containsKind(member.type, target)) {
-      return true
-    }
-  }
-  return false
 }
 
