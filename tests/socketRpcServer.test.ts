@@ -231,13 +231,13 @@ describe('SocketRpcServer protocol compatibility', () => {
     clientChannel.registerMessageType(RPC_ERROR_TYPE)
     registerRuntimeErrorCodec(clientChannel, registry, runtimeErrorType)
 
-    const errors: Array<{ requestId: number | bigint, message: string }> = []
+    const errors: Array<{ requestId: number | bigint, typeName: string, message: string }> = []
     clientChannel.onMessage(RPC_ERROR_TYPE, (msg: unknown) => {
       const requestId = (msg as { request_id: number | bigint }).request_id
       const exc = clientChannel.getReader().readException()
       clientChannel.getReader().readRest()
       const message = (exc.value as { what?: string }).what ?? String(exc.value)
-      errors.push({ requestId, message })
+      errors.push({ requestId, typeName: exc.typeName, message })
     })
 
     clientChannel.sendMessage(RPC_REQUEST_TYPE, {
@@ -256,8 +256,10 @@ describe('SocketRpcServer protocol compatibility', () => {
 
     expect(errors).to.have.length(2)
     expect(BigInt(errors[0].requestId)).to.equal(100n)
+    expect(errors[0].typeName).to.equal('runtime_error')
     expect(errors[0].message).to.equal('boom')
     expect(BigInt(errors[1].requestId)).to.equal(101n)
+    expect(errors[1].typeName).to.equal('runtime_error')
     expect(errors[1].message).to.equal('Function not found')
   })
 })
