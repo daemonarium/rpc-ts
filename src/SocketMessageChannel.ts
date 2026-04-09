@@ -6,19 +6,15 @@
  * (rpc_request, rpc_response, rpc_error) in that order for cpp-rpc compatibility.
  */
 
-import type { Socket } from './Socket.js'
-import { CircularBufferReader } from './CircularBufferReader.js'
-import { CircularBufferWriter } from './CircularBufferWriter.js'
+import { LocalSocket } from './LocalSocket.js'
+import { LocalCircularBufferReader } from './LocalCircularBufferReader.js'
+import { LocalCircularBufferWriter } from './LocalCircularBufferWriter.js'
+
 import { CodecRegistry } from './codec.js'
 
 const LENGTH_SIZE = 4
 
-export interface SocketMessageChannelSocket extends Socket {
-  flush(): void
-  drain(): void
-  reserveForReading(size: number): number
-  setOptions?(options: { dataEventCallback?: (dataSize: number) => void }): void
-}
+export type SocketMessageChannelSocket = LocalSocket
 
 interface DispatchEntry {
   typeName: string
@@ -26,18 +22,18 @@ interface DispatchEntry {
 }
 
 export class SocketMessageChannel {
-  readonly socket: SocketMessageChannelSocket
+  readonly socket: LocalSocket
   private handlingData = false
-  private readonly reader: CircularBufferReader
-  private readonly writer: CircularBufferWriter
+  private readonly reader: LocalCircularBufferReader
+  private readonly writer: LocalCircularBufferWriter
   private readonly codecs: CodecRegistry
   private readonly dispatchTable: DispatchEntry[] = []
 
-  constructor(socket: SocketMessageChannelSocket, codecs: CodecRegistry) {
+  constructor(socket: LocalSocket, codecs: CodecRegistry) {
     this.socket = socket
     this.codecs = codecs
-    this.reader = new CircularBufferReader(socket.inputBuffer, codecs)
-    this.writer = new CircularBufferWriter(socket.outputBuffer, codecs)
+    this.reader = new LocalCircularBufferReader(socket.inputBuffer, codecs)
+    this.writer = new LocalCircularBufferWriter(socket.outputBuffer, codecs)
   }
 
   /**
@@ -55,14 +51,14 @@ export class SocketMessageChannel {
 
   registerExceptionType(
     typeName: string,
-    serializer: (writer: CircularBufferWriter, value: unknown) => void,
-    deserializer: (reader: CircularBufferReader) => unknown
+    serializer: (writer: LocalCircularBufferWriter, value: unknown) => void,
+    deserializer: (reader: LocalCircularBufferReader) => unknown
   ): void {
     if (this.codecs.exceptions.has(typeName)) return
     this.codecs.exceptions.register({
       name: typeName,
-      serialize: (w, v) => serializer(w as unknown as CircularBufferWriter, v),
-      deserialize: (r, out) => out(deserializer(r as unknown as CircularBufferReader))
+      serialize: (w, v) => serializer(w as unknown as LocalCircularBufferWriter, v),
+      deserialize: (r, out) => out(deserializer(r as unknown as LocalCircularBufferReader))
     })
   }
 
@@ -77,7 +73,7 @@ export class SocketMessageChannel {
   /**
    * Begin sending a message; caller may write payload to returned writer, then call commitSend().
    */
-  beginSend(typeName: string, value: object): CircularBufferWriter {
+  beginSend(typeName: string, value: object): LocalCircularBufferWriter {
     const wireIndex = this.codecs.messages.getIndexOrThrow(typeName)
     this.socket.outputBuffer.poke(0, new Uint8Array(LENGTH_SIZE), LENGTH_SIZE)
     this.writer.offset = LENGTH_SIZE
@@ -178,11 +174,11 @@ export class SocketMessageChannel {
     }
   }
 
-  getReader(): CircularBufferReader {
+  getReader(): LocalCircularBufferReader {
     return this.reader
   }
 
-  getWriter(): CircularBufferWriter {
+  getWriter(): LocalCircularBufferWriter {
     return this.writer
   }
 }

@@ -1,12 +1,12 @@
 /**
  * LocalCircularBuffer - TypeScript implementation that uses local memory buffer
- * This implements the same circular buffer logic as MemoryCircularBuffer but
+ * This implements the same circular buffer logic as ModuleCircularBuffer but
  * uses a local ArrayBuffer instead of WebAssembly memory, and allows resizing.
  */
 
 import { CircularBuffer } from './CircularBuffer.js'
 
-const HEADER_SIZE = 12 // 3 * sizeof(uint32) for consistency with MemoryCircularBuffer
+const HEADER_SIZE = 12 // 3 * sizeof(uint32) for consistency with ModuleCircularBuffer
 const SIZE_OFFSET = 0
 const READ_OFFSET_OFFSET = 4
 const WRITE_OFFSET_OFFSET = 8

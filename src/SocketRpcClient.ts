@@ -14,12 +14,16 @@ interface PendingResponse {
   returnType: TypeDescription
 }
 
+function toRequestId(value: number | bigint): bigint {
+  return typeof value === 'bigint' ? value : BigInt(value)
+}
+
 export class SocketRpcClient implements RpcClient {
   private readonly messageChannel: SocketMessageChannel
   private readonly typeRegistry: TypeRegistry
   private readonly methodsById = new Map<number, RegisteredMethod>()
-  private readonly responseHandlers = new Map<number, PendingResponse>()
-  private lastRequestId = 0
+  private readonly responseHandlers = new Map<bigint, PendingResponse>()
+  private lastRequestId = 0n
 
   constructor(socket: SocketMessageChannelSocket, typeRegistry: TypeRegistry, codecs: CodecRegistry) {
     this.typeRegistry = typeRegistry
@@ -45,10 +49,11 @@ export class SocketRpcClient implements RpcClient {
       )
     }
 
-    this.messageChannel.onMessage(RPC_RESPONSE_TYPE, (msg: { request_id: number }, payloadSize: number) => {
-      const pending = this.responseHandlers.get(msg.request_id)
-      if (!pending) throw new Error(`Response handler ${msg.request_id} not found`)
-      this.responseHandlers.delete(msg.request_id)
+    this.messageChannel.onMessage(RPC_RESPONSE_TYPE, (msg: { request_id: number | bigint }, _payloadSize: number) => {
+      const requestId = toRequestId(msg.request_id)
+      const pending = this.responseHandlers.get(requestId)
+      if (!pending) throw new Error(`Response handler ${requestId.toString()} not found`)
+      this.responseHandlers.delete(requestId)
       if (pending.returnType.kind === TypeKind.Void) {
         pending.resolve(undefined)
         return
@@ -61,10 +66,11 @@ export class SocketRpcClient implements RpcClient {
       pending.resolve(result)
     })
 
-    this.messageChannel.onMessage(RPC_ERROR_TYPE, (msg: { request_id: number }) => {
-      const pending = this.responseHandlers.get(msg.request_id)
-      if (!pending) throw new Error(`Response handler ${msg.request_id} not found`)
-      this.responseHandlers.delete(msg.request_id)
+    this.messageChannel.onMessage(RPC_ERROR_TYPE, (msg: { request_id: number | bigint }) => {
+      const requestId = toRequestId(msg.request_id)
+      const pending = this.responseHandlers.get(requestId)
+      if (!pending) throw new Error(`Response handler ${requestId.toString()} not found`)
+      this.responseHandlers.delete(requestId)
       const exc = this.messageChannel.getReader().readException()
       this.messageChannel.getReader().readRest()
       const message = (exc.value as { what?: string }).what ?? String(exc.value)
@@ -97,11 +103,15 @@ export class SocketRpcClient implements RpcClient {
     }
     const returnType = method.methodType.item || ({ kind: TypeKind.Void, name: 'void' } as TypeDescription)
     const parameterTypes = (method.methodType.members || []).map((m) => m.type)
-    const requestId = this.lastRequestId++
+    const requestId = this.lastRequestId
+    this.lastRequestId += 1n
     const promise = new Promise((resolve, reject) => {
       this.responseHandlers.set(requestId, { resolve, reject, returnType })
     })
-    const writer = this.messageChannel.beginSend(RPC_REQUEST_TYPE, { request_id: requestId, function_id: methodId })
+    const writer = this.messageChannel.beginSend(RPC_REQUEST_TYPE, {
+      request_id: requestId,
+      function_id: BigInt(methodId)
+    })
     if (args.length !== parameterTypes.length) {
       throw new Error(`Argument count mismatch: expected ${parameterTypes.length}, got ${args.length}`)
     }
@@ -126,11 +136,15 @@ export class SocketRpcClient implements RpcClient {
     const idType = idMember.type
     const returnType = method.methodType.item || ({ kind: TypeKind.Void, name: 'void' } as TypeDescription)
     const parameterTypes = (method.methodType.members || []).map((m) => m.type)
-    const requestId = this.lastRequestId++
+    const requestId = this.lastRequestId
+    this.lastRequestId += 1n
     const promise = new Promise((resolve, reject) => {
       this.responseHandlers.set(requestId, { resolve, reject, returnType })
     })
-    const writer = this.messageChannel.beginSend(RPC_REQUEST_TYPE, { request_id: requestId, function_id: methodId })
+    const writer = this.messageChannel.beginSend(RPC_REQUEST_TYPE, {
+      request_id: requestId,
+      function_id: BigInt(methodId)
+    })
     serializeValueByType(writer as any, this.typeRegistry, idType, id as JsonValue)
     if (args.length !== parameterTypes.length) {
       throw new Error(`Argument count mismatch: expected ${parameterTypes.length}, got ${args.length}`)

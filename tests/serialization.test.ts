@@ -5,7 +5,7 @@ import { expect } from 'chai'
 
 import {
   LocalCircularBuffer,
-  CircularBufferReader,
+  LocalCircularBufferReader,
   LocalCircularBufferWriter,
   Reader,
   Writer,
@@ -59,7 +59,7 @@ function valuesEqual(type: RowType, expected: number | bigint, actual: number | 
   return Number(expected) === Number(actual)
 }
 
-function readByType(reader: CircularBufferReader, type: RowType): number | bigint {
+function readByType(reader: LocalCircularBufferReader, type: RowType): number | bigint {
   switch (type) {
     case 'u64': return reader.readU64()
     case 'i64': return reader.readI64()
@@ -142,7 +142,7 @@ describe('serialization reference (C++ TSV)', () => {
       const bytes = hexToBytes(hex)
       buffer.write(bytes, bytes.length)
 
-      const reader = new CircularBufferReader(buffer, codecs)
+      const reader = new LocalCircularBufferReader(buffer, codecs)
       let actual: number | bigint
       try {
         actual = readByType(reader, type)
@@ -333,13 +333,13 @@ describe('circular buffer roundtrip', () => {
   function roundtrip(
     bufSize: number,
     write: (w: LocalCircularBufferWriter) => void,
-    read: (r: CircularBufferReader) => unknown
+    read: (r: LocalCircularBufferReader) => unknown
   ): unknown {
     const buffer = new LocalCircularBuffer(bufSize)
     const writer = new LocalCircularBufferWriter(buffer, codecs, 0)
     write(writer)
     buffer.commitWrite(writer.offset)
-    const reader = new CircularBufferReader(buffer, codecs)
+    const reader = new LocalCircularBufferReader(buffer, codecs)
     const result = read(reader)
     reader.readRest()
     return result
@@ -434,7 +434,7 @@ describe('circular buffer roundtrip', () => {
     writer.writeI64(-7n)
     buffer.commitWrite(writer.offset)
 
-    const reader = new CircularBufferReader(buffer, codecs)
+    const reader = new LocalCircularBufferReader(buffer, codecs)
     const u = BigInt(reader.readU64())
     const s = reader.readString()
     const b = reader.readBool()
@@ -457,7 +457,7 @@ describe('circular buffer roundtrip', () => {
     }
     buffer.commitWrite(writer.offset)
 
-    const reader = new CircularBufferReader(buffer, codecs)
+    const reader = new LocalCircularBufferReader(buffer, codecs)
     const read: bigint[] = []
     for (let i = 0; i < count; i++) {
       read.push(BigInt(reader.readU64()))

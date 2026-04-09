@@ -1,5 +1,5 @@
 import { CircularBuffer } from './CircularBuffer.js'
-import { MemoryCircularBuffer } from './MemoryCircularBuffer.js'
+import { ModuleCircularBuffer } from './ModuleCircularBuffer.js'
 import { Socket } from './Socket.js'
 
 /**
@@ -63,9 +63,9 @@ export class ModuleSocket implements Socket {
     this.dataView = new DataView(memory.buffer, socketInfoPtr)
 
     // Pass the address where the circular_buffer_data* pointer is stored
-    // so MemoryCircularBuffer reads it dynamically (survives realloc + memory growth)
-    this.inputBuffer = new MemoryCircularBuffer(memory, socketInfoPtr + SOCKET_INFO_INPUT_BUFFER_DATA_OFFSET)
-    this.outputBuffer = new MemoryCircularBuffer(memory, socketInfoPtr + SOCKET_INFO_OUTPUT_BUFFER_DATA_OFFSET)
+    // so ModuleCircularBuffer reads it dynamically (survives realloc + memory growth)
+    this.inputBuffer = new ModuleCircularBuffer(memory, socketInfoPtr + SOCKET_INFO_INPUT_BUFFER_DATA_OFFSET)
+    this.outputBuffer = new ModuleCircularBuffer(memory, socketInfoPtr + SOCKET_INFO_OUTPUT_BUFFER_DATA_OFFSET)
   }
 
   /**

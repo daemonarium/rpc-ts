@@ -1,7 +1,7 @@
 /**
  * LocalSocket - TypeScript implementation that uses local buffers
  * This implements the same socket logic as ModuleSocket but uses
- * LocalCircularBuffer instead of MemoryCircularBuffer, and manages
+ * LocalCircularBuffer instead of ModuleCircularBuffer, and manages
  * all socket options locally.
  */
 

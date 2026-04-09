@@ -1,5 +1,5 @@
 /**
- * MemoryCircularBuffer - TypeScript implementation that operates on WebAssembly memory
+ * ModuleCircularBuffer - TypeScript implementation that operates on WebAssembly memory
  * This mirrors the C circular_buffer implementation structure.
  * 
  * Structure in memory (circular_buffer_data):
@@ -33,12 +33,12 @@ const READ_OFFSET_OFFSET = 4
 const WRITE_OFFSET_OFFSET = 8
 const DATA_OFFSET = 12
 
-export class MemoryCircularBuffer implements CircularBuffer {
+export class ModuleCircularBuffer implements CircularBuffer {
   private memory: WebAssembly.Memory
   private ptrAddress: number  // address in WASM memory where the circular_buffer_data* pointer is stored
 
   /**
-   * Creates a MemoryCircularBuffer that operates on WebAssembly memory.
+   * Creates a ModuleCircularBuffer that operates on WebAssembly memory.
    * The buffer pointer is read dynamically from ptrAddress each time,
    * so it stays correct after circular_buffer_grow reallocations and memory growth.
    *

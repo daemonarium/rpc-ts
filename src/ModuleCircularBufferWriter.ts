@@ -1,18 +1,12 @@
 import { CircularBuffer } from './CircularBuffer.js'
-import { CodecRegistry, type TypedValue } from './codec.js'
 
-type WriteLater = () => void
-
-export class CircularBufferWriter {
+export class ModuleCircularBufferWriter {
   private readonly textEncoder = new TextEncoder()
-  private readonly writtenPointers: unknown[] = []
-  private readonly pendingPointers: Array<{ value: unknown, writeLater: WriteLater }> = []
   private readonly scratch = new ArrayBuffer(8)
   private readonly scratchView = new DataView(this.scratch)  
 
   constructor(
     private readonly buffer: CircularBuffer,
-    private readonly codecs: CodecRegistry,
     public offset: number = 0
   ) {
   }
@@ -20,12 +14,6 @@ export class CircularBufferWriter {
   getOffset(): number {
     return this.offset
   }
-
-  beginFrame(): void {}
-
-  endFrame(): void {}
-
-  saveOffset(): void {}
 
   writeU64(value: bigint | number): void {
     this.writeUVarInt(this.toUnsigned(value))
@@ -111,70 +99,7 @@ export class CircularBufferWriter {
     this.offset += this.buffer.poke(this.offset, bytes, bytes.length)
   }
 
-  writeLength(length: number): void {
-    if (length < 0) {
-      throw new Error('Length cannot be negative')
-    }
-    this.writeU32(length)
-  }
-
-  writeException(typeName: string, value: unknown): void {
-    let index: number
-    try {
-      index = this.codecs.exceptions.getIndexOrThrow(typeName)
-    } catch {
-      index = this.codecs.exceptions.getIndexOrThrow('runtime_error')
-      typeName = 'runtime_error'
-      value = {
-        _type: 'runtime_error',
-        what: value instanceof Error ? value.message : String(value)
-      }
-    }
-    this.writeU32(index)
-    const codec = this.codecs.exceptions.getByIndex(index)
-    codec.serialize(this as any, value)
-  }
-
-  writeTyped(value: TypedValue): void {
-    if (!value || typeof value._type !== 'string') {
-      throw new Error('Typed value must provide _type string')
-    }
-    const index = this.codecs.typed.getIndexOrThrow(value._type)
-    this.writeU32(index)
-    const codec = this.codecs.typed.getByIndex(index)
-    codec.serialize(this as any, value)
-  }
-
-  writePointer(value: unknown, writeLater: WriteLater): void {
-    if (value === null) {
-      this.writeI32(0)
-      return
-    }
-    const existingIndex = this.writtenPointers.indexOf(value)
-    if (existingIndex !== -1) {
-      const delta = existingIndex - this.writtenPointers.length
-      this.writeI32(delta)
-      return
-    }
-    const pendingIndex = this.pendingPointers.findIndex(entry => entry.value === value)
-    if (pendingIndex !== -1) {
-      const delta = pendingIndex + 1
-      this.writeI32(delta)
-      return
-    }
-    const delta = this.pendingPointers.length + 1
-    this.writeI32(delta)
-    this.pendingPointers.push({ value, writeLater })
-  }
-
-  writeRest(): void {
-    while (this.pendingPointers.length > 0) {
-      const entry = this.pendingPointers.shift()
-      if (!entry) continue
-      entry.writeLater()
-      this.writtenPointers.push(entry.value)
-    }
-  }
+  writeRest(): void {}
 
   private writeLittleEndianUint64(value: bigint): void {
     const bytes = new Uint8Array(8)

@@ -4,7 +4,7 @@ import { CodecRegistry } from './codec.js'
 type AssignAfterRead = (value: unknown) => void
 type ReadLater = (output: (value: unknown) => void) => void
 
-export class CircularBufferReader {
+export class LocalCircularBufferReader {
   private readonly textDecoder = new TextDecoder()
   private readonly readPointers: unknown[] = []
   private readonly pendingPointers: Array<{ assignments: AssignAfterRead[], readLater: ReadLater }> = []

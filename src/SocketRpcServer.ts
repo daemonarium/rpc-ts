@@ -1,42 +1,52 @@
 import type { TypeRegistry } from './typeDescription.js'
-import { RawRpcServer } from './RawRpcServer.js'
 import { CodecRegistry } from './codec.js'
-import { SocketMessageChannel, type SocketMessageChannelSocket } from './SocketMessageChannel.js'
+import { SocketMessageChannel } from './SocketMessageChannel.js'
+import { LocalSocket } from './LocalSocket.js'
 import { ensureRpcTypesInRegistry, ensureRpcCodecs, RPC_REQUEST_TYPE, RPC_RESPONSE_TYPE, RPC_ERROR_TYPE } from './rpc.js'
-import type { Writer } from './writer.js'
+import type { TypeDescription } from './typeDescription.js'
 import { TypeKind } from './typeDescription.js'
 import { serializeValueByType, deserializeValueByType, type JsonValue } from './valueSerialization.js'
+import { RpcMethodDispatcher } from './RpcMethodDispatcher.js'
 
-/**
- * Writer adapter that skips the first writeU64 and writeBool (rpc_response header already sent via channel).
- */
-function createResponseWriterAdapter(getWriter: () => Writer): Writer {
-  let skip = 2
-  return new Proxy({} as Writer, {
-    get(_, prop) {
-      const w = getWriter()
-      const val = (w as any)[prop]
-      if (typeof val !== 'function') return val
-      if (prop === 'writeU64' || prop === 'writeBool') {
-        return (...args: any[]) => {
-          if (skip > 0) {
-            skip--
-            return
-          }
-          return (val as (...a: any[]) => any).apply(w, args)
-        }
-      }
-      return (...args: any[]) => (val as (...a: any[]) => any).apply(w, args)
+const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER)
+
+function toRequestId(value: number | bigint): bigint {
+  return typeof value === 'bigint' ? value : BigInt(value)
+}
+
+function toMethodId(value: number | bigint): number {
+  if (typeof value === 'number') {
+    if (!Number.isInteger(value) || value < 0 || !Number.isSafeInteger(value)) {
+      throw new Error(`Invalid function_id: ${value}`)
     }
-  })
+    return value
+  }
+  if (value < 0n || value > MAX_SAFE_BIGINT) {
+    throw new Error(`Invalid function_id: ${value.toString()}`)
+  }
+  return Number(value)
+}
+
+function toRuntimeErrorValue(error: unknown): { _type: string, what: string } {
+  const objectError = error as { what?: unknown } | null | undefined
+  return {
+    _type: 'runtime_error',
+    what:
+      typeof objectError?.what === 'string'
+        ? objectError.what
+        : error instanceof Error
+          ? error.message
+          : String(error)
+  }
 }
 
 export class SocketRpcServer {
   private readonly messageChannel: SocketMessageChannel
-  private readonly rawRpcServer: RawRpcServer
-  private currentRequestId = 0
+  private readonly typeRegistry: TypeRegistry
+  private readonly methodDispatcher: RpcMethodDispatcher
 
-  constructor(socket: SocketMessageChannelSocket, typeRegistry: TypeRegistry, codecs: CodecRegistry) {
+  constructor(socket: LocalSocket, typeRegistry: TypeRegistry, codecs: CodecRegistry) {
+    this.typeRegistry = typeRegistry
     ensureRpcTypesInRegistry(typeRegistry)
     ensureRpcCodecs(codecs, typeRegistry)
     this.messageChannel = new SocketMessageChannel(socket, codecs)
@@ -59,40 +69,31 @@ export class SocketRpcServer {
       )
     }
 
-    const beforeSend = () => {
-      this.messageChannel.beginSend(RPC_RESPONSE_TYPE, {
-        request_id: this.currentRequestId
-      })
-    }
-    const sender = () => {
-      this.messageChannel.commitSend()
-    }
-    const onError = (requestId: number, error: unknown) => {
-      const w = this.messageChannel.beginSend(RPC_ERROR_TYPE, { request_id: requestId })
-      w.writeException('runtime_error', error)
-      w.writeRest()
-      this.messageChannel.commitSend()
-    }
-    this.rawRpcServer = new RawRpcServer(typeRegistry, beforeSend, sender, onError)
+    this.methodDispatcher = new RpcMethodDispatcher(typeRegistry)
 
     this.messageChannel.onMessage(
       RPC_REQUEST_TYPE,
-      async (msg: { request_id: number; function_id: number }, _payloadSize: number) => {
-        this.currentRequestId = msg.request_id
-        if (!this.rawRpcServer.hasHandler(msg.function_id)) {
-          const w = this.messageChannel.beginSend(RPC_ERROR_TYPE, { request_id: msg.request_id })
-          w.writeException('runtime_error', 'Function not found')
-          w.writeRest()
-          this.messageChannel.commitSend()
+      async (msg: { request_id: number | bigint; function_id: number | bigint }, _payloadSize: number) => {
+        const requestId = toRequestId(msg.request_id)
+        let functionId: number
+        try {
+          functionId = toMethodId(msg.function_id)
+        } catch (error) {
+          this.sendError(requestId, error)
           return
         }
-        const writer = createResponseWriterAdapter(() => this.messageChannel.getWriter() as any)
-        await this.rawRpcServer.handleCallWithIds(
-          msg.request_id,
-          msg.function_id,
-          this.messageChannel.getReader() as any,
-          writer
-        )
+        if (!this.methodDispatcher.hasMethod(functionId)) {
+          this.sendError(requestId, 'Function not found')
+          return
+        }
+
+        const prepared = this.methodDispatcher.prepareCall(functionId, this.messageChannel.getReader() as any)
+        try {
+          const result = await prepared.callFn()
+          this.sendResponse(requestId, prepared.returnType, result)
+        } catch (error) {
+          this.sendError(requestId, error)
+        }
       }
     )
 
@@ -129,5 +130,23 @@ export class SocketRpcServer {
 
   channel(): SocketMessageChannel {
     return this.messageChannel
+  }
+
+  private sendResponse(requestId: bigint, returnType: TypeDescription, result: unknown): void {
+    if (returnType.kind === TypeKind.Void) {
+      this.messageChannel.sendMessage(RPC_RESPONSE_TYPE, { request_id: requestId })
+      return
+    }
+    const writer = this.messageChannel.beginSend(RPC_RESPONSE_TYPE, { request_id: requestId })
+    serializeValueByType(writer as any, this.typeRegistry, returnType, result as JsonValue)
+    writer.writeRest()
+    this.messageChannel.commitSend()
+  }
+
+  private sendError(requestId: bigint, error: unknown): void {
+    const writer = this.messageChannel.beginSend(RPC_ERROR_TYPE, { request_id: requestId })
+    writer.writeException('runtime_error', toRuntimeErrorValue(error))
+    writer.writeRest()
+    this.messageChannel.commitSend()
   }
 }

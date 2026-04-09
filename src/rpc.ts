@@ -13,30 +13,30 @@ export const RPC_RESPONSE_TYPE = 'rpc_response'
 export const RPC_ERROR_TYPE = 'rpc_error'
 
 export interface RpcRequest {
-  request_id: number
-  function_id: number
+  request_id: bigint
+  function_id: bigint
 }
 
 export interface RpcResponse {
-  request_id: number
+  request_id: bigint
 }
 
 export interface RpcError {
-  request_id: number
+  request_id: bigint
 }
 
 /**
  * Create TypeDescription for rpc_request (request_id: uint64, function_id: uint64).
  */
 function createRpcRequestType(registry: TypeRegistry): TypeDescription {
-  const uint32 = registry.getTypeByName('uint32')
-  if (!uint32) throw new Error('Registry must have uint32 type')
+  const uint64 = registry.getTypeByName('uint64')
+  if (!uint64) throw new Error('Registry must have uint64 type')
   return TypeDescription.create({
     name: RPC_REQUEST_TYPE,
     kind: TypeKind.Message,
     members: [
-      { name: 'request_id', type: uint32, annotations: [] },
-      { name: 'function_id', type: uint32, annotations: [] }
+      { name: 'request_id', type: uint64, annotations: [] },
+      { name: 'function_id', type: uint64, annotations: [] }
     ]
   })
 }
@@ -45,13 +45,13 @@ function createRpcRequestType(registry: TypeRegistry): TypeDescription {
  * Create TypeDescription for rpc_response (request_id: uint64).
  */
 function createRpcResponseType(registry: TypeRegistry): TypeDescription {
-  const uint32 = registry.getTypeByName('uint32')
-  if (!uint32) throw new Error('Registry must have uint32 type')
+  const uint64 = registry.getTypeByName('uint64')
+  if (!uint64) throw new Error('Registry must have uint64 type')
   return TypeDescription.create({
     name: RPC_RESPONSE_TYPE,
     kind: TypeKind.Message,
     members: [
-      { name: 'request_id', type: uint32, annotations: [] }
+      { name: 'request_id', type: uint64, annotations: [] }
     ]
   })
 }
@@ -60,13 +60,13 @@ function createRpcResponseType(registry: TypeRegistry): TypeDescription {
  * Create TypeDescription for rpc_error (request_id: uint64).
  */
 function createRpcErrorType(registry: TypeRegistry): TypeDescription {
-  const uint32 = registry.getTypeByName('uint32')
-  if (!uint32) throw new Error('Registry must have uint32 type')
+  const uint64 = registry.getTypeByName('uint64')
+  if (!uint64) throw new Error('Registry must have uint64 type')
   return TypeDescription.create({
     name: RPC_ERROR_TYPE,
     kind: TypeKind.Message,
     members: [
-      { name: 'request_id', type: uint32, annotations: [] }
+      { name: 'request_id', type: uint64, annotations: [] }
     ]
   })
 }
