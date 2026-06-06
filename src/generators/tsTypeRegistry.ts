@@ -32,12 +32,39 @@ export function sanitizeVariableName(name: string): string {
     .replace(/^_|_$/g, '') // Remove leading/trailing underscores
 }
 
+export function escapeTypeScriptKeyword(name: string): string {
+  if (TS_KEYWORDS.has(name)) {
+    return `${name}_`
+  }
+  return name
+}
+
+export function assignTypeVariableNames(types: TypeDescription[]): string[] {
+  const usedNames = new Set<string>()
+  const varNames: string[] = []
+
+  for (let i = 0; i < types.length; i++) {
+    const type = types[i]
+    let baseName = type.name
+      ? sanitizeVariableName(type.name)
+      : `type_${i}`
+    baseName = escapeTypeScriptKeyword(baseName)
+
+    let varName = baseName
+    let collision = 2
+    while (usedNames.has(varName)) {
+      varName = `${baseName}_${collision}`
+      collision++
+    }
+    usedNames.add(varName)
+    varNames.push(varName)
+  }
+
+  return varNames
+}
+
 export function getTypeVariableName(type: TypeDescription, index: number, allTypes: TypeDescription[]): string {
-  const baseName = sanitizeVariableName(type.name || `type_${index}`)
-  
-  // Always use index suffix to avoid conflicts with keywords and ensure uniqueness
-  // Format: baseName_index (e.g., void_0, uint_1, direction_118)
-  return `${baseName}_${index}`
+  return assignTypeVariableNames(allTypes)[index]
 }
 
 export function renderKind(kind: TypeKind): string {
@@ -172,7 +199,7 @@ export function generateTypeRegistryCode(
   const types = registry.getTypes()
 
   // Generate variable names for all types
-  const varNames = types.map((type, i) => getTypeVariableName(type, i, types))
+  const varNames = assignTypeVariableNames(types)
   const varNameMap = new Map<TypeDescription, string>()
   types.forEach((type, i) => varNameMap.set(type, varNames[i]))
 
@@ -184,6 +211,7 @@ export function generateTypeRegistryCode(
     const varName = varNames[i]
     const tsType = generateTypeScriptType(type, varNameMap, varName)
     if (tsType) {
+      typesLines.push(`// type index: ${i}`)
       typesLines.push(tsType)
       typesLines.push('')
     }
@@ -200,6 +228,7 @@ export function generateTypeRegistryCode(
   for (let i = 0; i < types.length; i++) {
     const type = types[i]
     const varName = varNames[i]
+    lines.push(`  // type index: ${i}`)
     lines.push(`  const ${varName} = TypeDescription.create({`)
     lines.push(`    name: ${JSON.stringify(type.name)},`)
     lines.push(`    kind: ${renderKind(type.kind)},`)
