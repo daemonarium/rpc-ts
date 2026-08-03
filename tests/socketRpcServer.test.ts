@@ -18,6 +18,7 @@ import {
   RPC_ERROR_TYPE,
   type SocketMessageChannelSocket
 } from '../src/index.js'
+import { RpcException } from '../src/RpcException.js'
 import { serializeValueByType, deserializeValueByType, type JsonValue } from '../src/valueSerialization.js'
 
 const BUF_SIZE = 4096
@@ -54,9 +55,15 @@ interface TestMethods {
   sumId: number
   pingId: number
   failId: number
+  failTypedId: number
 }
 
-function createTestRegistry(): { registry: TypeRegistry, methods: TestMethods, runtimeErrorType: TypeDescription } {
+function createTestRegistry(): {
+  registry: TypeRegistry
+  methods: TestMethods
+  runtimeErrorType: TypeDescription
+  notFoundType: TypeDescription
+} {
   const registry = new TypeRegistry()
   const uint32 = registry.getTypeByName('uint32')
   const voidType = registry.getTypeByName('void')
@@ -67,6 +74,12 @@ function createTestRegistry(): { registry: TypeRegistry, methods: TestMethods, r
 
   const runtimeErrorType = TypeDescription.create({
     name: 'runtime_error',
+    kind: TypeKind.Exception,
+    members: [{ name: 'what', type: stringType, annotations: [] }]
+  })
+
+  const notFoundType = TypeDescription.create({
+    name: 'fs_not_found',
     kind: TypeKind.Exception,
     members: [{ name: 'what', type: stringType, annotations: [] }]
   })
@@ -97,17 +110,29 @@ function createTestRegistry(): { registry: TypeRegistry, methods: TestMethods, r
     throw new Error('boom')
   }
 
+  const failTypedFn = TypeDescription.create({
+    name: 'fail_typed_fn',
+    kind: TypeKind.Function,
+    members: [],
+    item: uint32
+  })
+  failTypedFn.implementation = () => {
+    throw new RpcException('missing file', 'fs_not_found')
+  }
+
   const serviceType = TypeDescription.create({
     name: 'test_service',
     kind: TypeKind.Object,
     members: [
       { name: 'sum', type: sumFn, annotations: [] },
       { name: 'ping', type: pingFn, annotations: [] },
-      { name: 'fail', type: failFn, annotations: [] }
+      { name: 'fail', type: failFn, annotations: [] },
+      { name: 'fail_typed', type: failTypedFn, annotations: [] }
     ]
   })
 
   registry.registerType(runtimeErrorType)
+  registry.registerType(notFoundType)
   registry.registerType(serviceType)
   registry.assignMethodIds()
 
@@ -115,10 +140,12 @@ function createTestRegistry(): { registry: TypeRegistry, methods: TestMethods, r
   return {
     registry,
     runtimeErrorType,
+    notFoundType,
     methods: {
       sumId: methodByName.get('sum') ?? -1,
       pingId: methodByName.get('ping') ?? -1,
-      failId: methodByName.get('fail') ?? -1
+      failId: methodByName.get('fail') ?? -1,
+      failTypedId: methodByName.get('fail_typed') ?? -1
     }
   }
 }
@@ -261,6 +288,44 @@ describe('SocketRpcServer protocol compatibility', () => {
     expect(BigInt(errors[1].requestId)).to.equal(101n)
     expect(errors[1].typeName).to.equal('runtime_error')
     expect(errors[1].message).to.equal('Function not found')
+  })
+
+  it('propagates typed RpcException typeName when registered', async () => {
+    const { registry, methods, runtimeErrorType, notFoundType } = createTestRegistry()
+    const codecs = new CodecRegistry()
+    ensureRpcTypesInRegistry(registry)
+    ensureRpcCodecs(codecs, registry)
+
+    const { s0, s1, transfer } = createLoopbackPair()
+    const server = new SocketRpcServer(s1, registry, codecs)
+    const clientChannel = new SocketMessageChannel(s0, codecs)
+    clientChannel.registerMessageType(RPC_REQUEST_TYPE)
+    clientChannel.registerMessageType(RPC_RESPONSE_TYPE)
+    clientChannel.registerMessageType(RPC_ERROR_TYPE)
+    registerRuntimeErrorCodec(clientChannel, registry, runtimeErrorType)
+    registerRuntimeErrorCodec(clientChannel, registry, notFoundType)
+
+    const errors: Array<{ typeName: string, message: string }> = []
+    clientChannel.onMessage(RPC_ERROR_TYPE, () => {
+      const exc = clientChannel.getReader().readException()
+      clientChannel.getReader().readRest()
+      const message = (exc.value as { what?: string }).what ?? String(exc.value)
+      errors.push({ typeName: exc.typeName, message })
+    })
+
+    clientChannel.sendMessage(RPC_REQUEST_TYPE, {
+      request_id: 200n,
+      function_id: BigInt(methods.failTypedId)
+    })
+
+    transfer(s0, s1)
+    await server.channel().handleData()
+    transfer(s1, s0)
+    await clientChannel.handleData()
+
+    expect(errors).to.have.length(1)
+    expect(errors[0].typeName).to.equal('fs_not_found')
+    expect(errors[0].message).to.equal('missing file')
   })
 })
 

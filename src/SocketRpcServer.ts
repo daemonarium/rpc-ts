@@ -7,6 +7,7 @@ import type { TypeDescription } from './typeDescription.js'
 import { TypeKind } from './typeDescription.js'
 import { serializeValueByType, deserializeValueByType, type JsonValue } from './valueSerialization.js'
 import { RpcMethodDispatcher } from './RpcMethodDispatcher.js'
+import { RpcException } from './RpcException.js'
 
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER)
 
@@ -27,16 +28,54 @@ function toMethodId(value: number | bigint): number {
   return Number(value)
 }
 
-function toRuntimeErrorValue(error: unknown): { _type: string, what: string } {
-  const objectError = error as { what?: unknown } | null | undefined
+function exceptionMessage(error: unknown): string {
+  const objectError = error as { what?: unknown, message?: unknown } | null | undefined
+  if (typeof objectError?.what === 'string') {
+    return objectError.what
+  }
+  if (error instanceof Error) {
+    return error.message
+  }
+  if (typeof objectError?.message === 'string') {
+    return objectError.message
+  }
+  return String(error)
+}
+
+function resolveExceptionWire(
+  error: unknown,
+  typeRegistry: TypeRegistry
+): { typeName: string, value: { _type: string, what: string } } {
+  const objectError = error as { _type?: unknown, typeName?: unknown } | null | undefined
+  let typeName = 'runtime_error'
+  if (error instanceof RpcException && error.typeName) {
+    typeName = error.typeName
+  } else if (typeof objectError?._type === 'string') {
+    typeName = objectError._type
+  } else if (typeof objectError?.typeName === 'string') {
+    typeName = objectError.typeName
+  }
+
+  const registered = typeRegistry.getTypeByName(typeName)
+  if (!registered || registered.kind !== TypeKind.Exception) {
+    const runtimeError = typeRegistry.getTypeByName('runtime_error')
+    const unknownException = typeRegistry.getTypeByName('unknown_exception')
+    if (runtimeError && runtimeError.kind === TypeKind.Exception) {
+      typeName = 'runtime_error'
+    } else if (unknownException && unknownException.kind === TypeKind.Exception) {
+      typeName = 'unknown_exception'
+    } else {
+      const anyException = typeRegistry.getTypes().find((type) => type.kind === TypeKind.Exception)
+      typeName = anyException?.name ?? 'runtime_error'
+    }
+  }
+
   return {
-    _type: 'runtime_error',
-    what:
-      typeof objectError?.what === 'string'
-        ? objectError.what
-        : error instanceof Error
-          ? error.message
-          : String(error)
+    typeName,
+    value: {
+      _type: typeName,
+      what: exceptionMessage(error)
+    }
   }
 }
 
@@ -144,8 +183,9 @@ export class SocketRpcServer {
   }
 
   private sendError(requestId: bigint, error: unknown): void {
+    const { typeName, value } = resolveExceptionWire(error, this.typeRegistry)
     const writer = this.messageChannel.beginSend(RPC_ERROR_TYPE, { request_id: requestId })
-    writer.writeException('runtime_error', toRuntimeErrorValue(error))
+    writer.writeException(typeName, value)
     writer.writeRest()
     this.messageChannel.commitSend()
   }
