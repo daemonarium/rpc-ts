@@ -20,7 +20,7 @@ export {
   type TypeMember,
   type RegisteredMethod,
 } from './typeDescription.js'
-export { deserializeTypeRegistry, createTypeRegistrySerializationRegistry, createTypeRegistryCodecs } from './registrySerialization.js'
+export { deserializeTypeRegistry, serializeTypeRegistry, createTypeRegistrySerializationRegistry, createTypeRegistryCodecs } from './registrySerialization.js'
 export { serializeTypedJson, deserializeTypedJson, registerDynamicCodecs, deserializeValueByType } from './valueSerialization.js'
 export { glueCodeGenerators } from './generators/glueCode.js'
 export type { GlueCodeGenerator } from './generators/glueCode.js'

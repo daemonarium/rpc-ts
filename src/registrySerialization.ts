@@ -1,9 +1,11 @@
 import { CodecRegistry } from './codec.js'
 import { Reader } from './reader.js'
+import { Writer } from './writer.js'
 import { TypeRegistry, TypeDescription, TypeKind, TypeDescriptionParameters } from './typeDescription.js'
+import type { TypedValue } from './codec.js'
 import { 
   registerDynamicCodecs, serializeValueByType, deserializeValueByType, JsonValue,
-  deserializeTypedJson
+  deserializeTypedJson, serializeTypedJson
 } from './valueSerialization.js'
 
 export function deserializeTypeRegistry(serialized: Uint8Array): TypeRegistry {    
@@ -14,6 +16,45 @@ export function deserializeTypeRegistry(serialized: Uint8Array): TypeRegistry {
   const rawTypeRegistry = deserializeTypedJson(reader, typeRegistrySerializationRegistry, 'type_registry')
   const typeRegistry = new TypeRegistry(rawTypeRegistry._types as TypeDescription[])
   return typeRegistry
+}
+
+/**
+ * Serialize a TypeRegistry to the same binary format as WASM rpc_description /
+ * deserializeTypeRegistry input. Builds TypedValue wrappers so pointer identity
+ * across shared TypeDescription references is preserved.
+ */
+export function serializeTypeRegistry(registry: TypeRegistry): Uint8Array {
+  const types = registry.getTypes()
+  const wrappers = new Map<TypeDescription, TypedValue>()
+  for (const type of types) {
+    wrappers.set(type, { _type: 'type_description' } as TypedValue)
+  }
+  for (const type of types) {
+    const wrapped = wrappers.get(type) as TypedValue & Record<string, unknown>
+    wrapped.name = type.name
+    wrapped.kind = type.kind
+    wrapped.members = (type.members ?? []).map((member) => ({
+      name: member.name,
+      type: member.type ? wrappers.get(member.type) ?? null : null,
+      annotations: member.annotations ?? [],
+    }))
+    wrapped.item = type.item ? wrappers.get(type.item) ?? null : null
+    wrapped.key = type.key ? wrappers.get(type.key) ?? null : null
+    wrapped.enumMembers = type.enumMembers ?? []
+    wrapped.bases = (type.bases ?? []).map((base) => wrappers.get(base) ?? null)
+    wrapped.annotations = type.annotations ?? []
+  }
+
+  const typeRegistrySerializationRegistry = createTypeRegistrySerializationRegistry()
+  const codecs = new CodecRegistry()
+  registerDynamicCodecs(codecs, typeRegistrySerializationRegistry)
+  const writer = new Writer(codecs)
+  serializeTypedJson(writer, typeRegistrySerializationRegistry, {
+    _type: 'type_registry',
+    _types: types.map((type) => wrappers.get(type)!),
+  })
+  writer.writeRest()
+  return new Uint8Array(writer.toArrayBuffer())
 }
 
 let typeRegistryCodecs: CodecRegistry | undefined = undefined

@@ -117,6 +117,10 @@ export const serializeValueByType = (writer: Writer, registry: TypeRegistry, typ
       serializeObject(writer, registry, type, value as Record<string, JsonValue>)
       break
     case TypeKind.Pointer: {
+      if (value === null || value === undefined) {
+        writer.writePointer(null, () => {})
+        break
+      }
       const typed = value as TypedValue
       if (!typed || typeof typed._type !== 'string') {
         throw new Error('Pointer value must provide _type')
