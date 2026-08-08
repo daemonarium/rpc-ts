@@ -208,7 +208,7 @@ export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, t
           for (const [k, v] of entries) {
             object[String(k)] = v
           }
-          return
+          return output(object)
         }
         output(new Map(entries))
         return
