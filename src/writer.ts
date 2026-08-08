@@ -153,11 +153,14 @@ export class Writer {
   }
 
   writeRest(): void {
+    // Match C++ stream_writer::write_rest: keep current entry in pending during
+    // writeLater so forward-ref deltas stay aligned with peek-based readRest.
     while (this.pendingPointers.length > 0) {
-      const entry = this.pendingPointers.shift()
+      const entry = this.pendingPointers[0]
       if (!entry) continue
       entry.writeLater()
       this.writtenPointers.push(entry.value)
+      this.pendingPointers.shift()
     }
   }
 
