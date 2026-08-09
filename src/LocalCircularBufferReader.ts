@@ -1,10 +1,10 @@
 import { CircularBuffer } from './CircularBuffer.js'
 import { CodecRegistry } from './codec.js'
+import type { IReader, ReadLater } from './writerTypes.js'
 
 type AssignAfterRead = (value: unknown) => void
-type ReadLater = (output: (value: unknown) => void) => void
 
-export class LocalCircularBufferReader {
+export class LocalCircularBufferReader implements IReader {
   private readonly textDecoder = new TextDecoder()
   private readonly readPointers: unknown[] = []
   private readonly pendingPointers: Array<{ assignments: AssignAfterRead[], readLater: ReadLater }> = []
@@ -32,6 +32,8 @@ export class LocalCircularBufferReader {
   enterFrame(): void {}
 
   exitFrame(): void {}
+
+  saveOffset(): void {}
 
   enterIndexedFrame(_id: number): void {
     throw new Error('Indexed frames are not supported in circular buffer reader')
@@ -166,7 +168,7 @@ export class LocalCircularBufferReader {
       throw new Error(`Exception type not registered for deserialization (index ${index})`)
     }
     let value: unknown
-    codec.deserialize(this as any, (v) => {
+    codec.deserialize(this, (v) => {
       value = v
     })
     return { typeName: codec.name, value }
@@ -175,10 +177,26 @@ export class LocalCircularBufferReader {
   readTyped<T>(output: (value: T) => void): void {
     const index = this.readU32()
     const codec = this.codecs.typed.getByIndex(index)
-    codec.deserialize(this as any, output)
+    codec.deserialize(this, output)
   }
 
-  readPointer<T>(assign: (value: T) => void, readLater: (output: (value: T) => void) => void): void {
+  readMap(
+    readKey: (r: IReader, assign: (key: unknown) => void) => void,
+    readVal: (r: IReader, assign: (val: unknown) => void) => void
+  ): Array<[unknown, unknown]> {
+    const n = this.readLength()
+    const out: Array<[unknown, unknown]> = []
+    for (let i = 0; i < n; ++i) {
+      let key: unknown
+      let val: unknown
+      readKey(this, k => { key = k })
+      readVal(this, v => { val = v })
+      out.push([key, val])
+    }
+    return out
+  }
+
+  readPointer<T>(assign: (value: T) => void, readLater: ReadLater): void {
     const delta = this.readI32()
     if (delta === 0) {
       assign(null as any)

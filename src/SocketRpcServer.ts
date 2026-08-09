@@ -97,10 +97,10 @@ export class SocketRpcServer {
       if (type.kind !== TypeKind.Exception) continue
       this.messageChannel.registerExceptionType(
         type.name,
-        (w, v) => serializeValueByType(w as any, typeRegistry, type, v as JsonValue),
+        (w, v) => serializeValueByType(w, typeRegistry, type, v as JsonValue),
         (r) => {
           let result: unknown
-          deserializeValueByType(r as any, typeRegistry, type, (v) => {
+          deserializeValueByType(r, typeRegistry, type, (v) => {
             result = v
           })
           return result
@@ -177,7 +177,7 @@ export class SocketRpcServer {
       return
     }
     const writer = this.messageChannel.beginSend(RPC_RESPONSE_TYPE, { request_id: requestId })
-    serializeValueByType(writer as any, this.typeRegistry, returnType, result as JsonValue)
+    serializeValueByType(writer, this.typeRegistry, returnType, result as JsonValue)
     writer.writeRest()
     this.messageChannel.commitSend()
   }

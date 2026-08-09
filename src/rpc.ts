@@ -99,8 +99,8 @@ export function ensureRpcCodecs(codecs: CodecRegistry, registry: TypeRegistry): 
     if (!type) throw new Error(`RPC type ${name} not in registry; call ensureRpcTypesInRegistry first`)
     codecs.messages.register({
       name,
-      serialize: (writer, value) => serializeValueByType(writer as any, registry, type, value as JsonValue),
-      deserialize: (reader, output) => deserializeValueByType(reader as any, registry, type, output)
+      serialize: (writer, value) => serializeValueByType(writer, registry, type, value as JsonValue),
+      deserialize: (reader, output) => deserializeValueByType(reader, registry, type, output)
     })
   }
 }

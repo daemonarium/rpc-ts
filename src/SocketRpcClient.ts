@@ -38,10 +38,10 @@ export class SocketRpcClient implements RpcClient {
       if (type.kind !== TypeKind.Exception) continue
       this.messageChannel.registerExceptionType(
         type.name,
-        (w, v) => serializeValueByType(w as any, typeRegistry, type, v as JsonValue),
+        (w, v) => serializeValueByType(w, typeRegistry, type, v as JsonValue),
         (r) => {
           let result: unknown
-          deserializeValueByType(r as any, typeRegistry, type, (v) => {
+          deserializeValueByType(r, typeRegistry, type, (v) => {
             result = v
           })
           return result
@@ -59,7 +59,7 @@ export class SocketRpcClient implements RpcClient {
         return
       }
       let result: unknown
-      deserializeValueByType(this.messageChannel.getReader() as any, this.typeRegistry, pending.returnType, (value) => {
+      deserializeValueByType(this.messageChannel.getReader(), this.typeRegistry, pending.returnType, (value) => {
         result = value
       })
       this.messageChannel.getReader().readRest()
@@ -116,7 +116,7 @@ export class SocketRpcClient implements RpcClient {
       throw new Error(`Argument count mismatch: expected ${parameterTypes.length}, got ${args.length}`)
     }
     for (let i = 0; i < args.length; i++) {
-      serializeValueByType(writer as any, this.typeRegistry, parameterTypes[i], args[i] as JsonValue)
+      serializeValueByType(writer, this.typeRegistry, parameterTypes[i], args[i] as JsonValue)
     }
     writer.writeRest()
     this.messageChannel.commitSend()
@@ -145,12 +145,12 @@ export class SocketRpcClient implements RpcClient {
       request_id: requestId,
       function_id: BigInt(methodId)
     })
-    serializeValueByType(writer as any, this.typeRegistry, idType, id as JsonValue)
+    serializeValueByType(writer, this.typeRegistry, idType, id as JsonValue)
     if (args.length !== parameterTypes.length) {
       throw new Error(`Argument count mismatch: expected ${parameterTypes.length}, got ${args.length}`)
     }
     for (let i = 0; i < args.length; i++) {
-      serializeValueByType(writer as any, this.typeRegistry, parameterTypes[i], args[i] as JsonValue)
+      serializeValueByType(writer, this.typeRegistry, parameterTypes[i], args[i] as JsonValue)
     }
     writer.writeRest()
     this.messageChannel.commitSend()

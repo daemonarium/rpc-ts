@@ -1,8 +1,7 @@
 import { CodecRegistry, type TypedValue } from './codec.js'
+import type { IWriter, WriteLater } from './writerTypes.js'
 
-type WriteLater = () => void
-
-export class Writer {
+export class Writer implements IWriter {
   private buffer: Uint8Array
   private view: DataView
   private length = 0
@@ -128,6 +127,18 @@ export class Writer {
     this.writeU32(index)
     const codec = this.codecs.typed.getByIndex(index)
     codec.serialize(this, value)
+  }
+
+  writeMap(
+    entries: ReadonlyArray<[unknown, unknown]>,
+    writeKey: (w: IWriter, key: unknown) => void,
+    writeVal: (w: IWriter, val: unknown) => void
+  ): void {
+    this.writeLength(entries.length)
+    for (const [k, v] of entries) {
+      writeKey(this, k)
+      writeVal(this, v)
+    }
   }
 
   writePointer(value: unknown, writeLater: WriteLater): void {

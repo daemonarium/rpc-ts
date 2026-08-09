@@ -9,6 +9,7 @@
 import { LocalSocket } from './LocalSocket.js'
 import { LocalCircularBufferReader } from './LocalCircularBufferReader.js'
 import { LocalCircularBufferWriter } from './LocalCircularBufferWriter.js'
+import type { IWriter, IReader } from './writerTypes.js'
 
 import { CodecRegistry } from './codec.js'
 
@@ -51,14 +52,14 @@ export class SocketMessageChannel {
 
   registerExceptionType(
     typeName: string,
-    serializer: (writer: LocalCircularBufferWriter, value: unknown) => void,
-    deserializer: (reader: LocalCircularBufferReader) => unknown
+    serializer: (writer: IWriter, value: unknown) => void,
+    deserializer: (reader: IReader) => unknown
   ): void {
     if (this.codecs.exceptions.has(typeName)) return
     this.codecs.exceptions.register({
       name: typeName,
-      serialize: (w, v) => serializer(w as unknown as LocalCircularBufferWriter, v),
-      deserialize: (r, out) => out(deserializer(r as unknown as LocalCircularBufferReader))
+      serialize: (w, v) => serializer(w, v),
+      deserialize: (r, out) => out(deserializer(r))
     })
   }
 
@@ -79,7 +80,7 @@ export class SocketMessageChannel {
     this.writer.offset = LENGTH_SIZE
     this.writer.writeU64(wireIndex)
     const codec = this.codecs.messages.getByIndex(wireIndex)
-    codec.serialize(this.writer as any, value)
+    codec.serialize(this.writer, value)
     this.writer.writeRest()
     return this.writer
   }
@@ -146,7 +147,7 @@ export class SocketMessageChannel {
         }
         let msg: unknown
         const codec = this.codecs.messages.getByIndex(typeIndex)
-        codec.deserialize(this.reader as any, (v: unknown) => { msg = v })
+        codec.deserialize(this.reader, (v: unknown) => { msg = v })
         this.reader.readRest()
         const payloadSize = msgLen - this.reader.getReadOffset()
         try {

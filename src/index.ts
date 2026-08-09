@@ -1,5 +1,6 @@
 export { Reader } from './reader.js'
 export { Writer } from './writer.js'
+export type { IWriter, IReader, WriteLater, ReadLater, TypedWriteValue } from './writerTypes.js'
 export type { CircularBuffer } from './CircularBuffer.js'
 export { ModuleCircularBuffer } from './ModuleCircularBuffer.js'
 export { LocalCircularBuffer } from './LocalCircularBuffer.js'

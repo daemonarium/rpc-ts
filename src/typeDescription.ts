@@ -1,6 +1,4 @@
 import { CodecRegistry, type TypedValue } from './codec.js'
-import type { Reader } from './reader.js'
-import type { Writer } from './writer.js'
 
 export enum TypeKind {
   Void = 0,

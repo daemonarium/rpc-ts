@@ -1,14 +1,13 @@
 import { LocalCircularBuffer } from './LocalCircularBuffer.js'
 import { CodecRegistry, type TypedValue } from './codec.js'
-
-type WriteLater = () => void
+import type { IWriter, WriteLater } from './writerTypes.js'
 
 /**
  * Writer for LocalCircularBuffer that automatically grows the buffer when
  * more space is needed during write (like the C++ circular_buffer_writer
  * with circular_buffer_reserve_for_writing).
  */
-export class LocalCircularBufferWriter {
+export class LocalCircularBufferWriter implements IWriter {
   private readonly textEncoder = new TextEncoder()
   private readonly writtenPointers: unknown[] = []
   private readonly pendingPointers: Array<{ value: unknown, writeLater: WriteLater }> = []
@@ -158,7 +157,7 @@ export class LocalCircularBufferWriter {
     }
     this.writeU32(index)
     const codec = this.codecs.exceptions.getByIndex(index)
-    codec.serialize(this as any, value)
+    codec.serialize(this, value)
   }
 
   writeTyped(value: TypedValue): void {
@@ -168,7 +167,19 @@ export class LocalCircularBufferWriter {
     const index = this.codecs.typed.getIndexOrThrow(value._type)
     this.writeU32(index)
     const codec = this.codecs.typed.getByIndex(index)
-    codec.serialize(this as any, value)
+    codec.serialize(this, value)
+  }
+
+  writeMap(
+    entries: ReadonlyArray<[unknown, unknown]>,
+    writeKey: (w: IWriter, key: unknown) => void,
+    writeVal: (w: IWriter, val: unknown) => void
+  ): void {
+    this.writeLength(entries.length)
+    for (const [k, v] of entries) {
+      writeKey(this, k)
+      writeVal(this, v)
+    }
   }
 
   writePointer(value: unknown, writeLater: WriteLater): void {

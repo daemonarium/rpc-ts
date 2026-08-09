@@ -1,13 +1,12 @@
-import type { Reader } from './reader.js'
-import type { Writer } from './writer.js'
+import type { IWriter, IReader } from './writerTypes.js'
 
 export interface TypedValue {
   _type: string
   [key: string]: unknown
 }
 
-export type Serializer<T = unknown> = (writer: Writer, value: T) => void
-export type Deserializer<T = unknown> = (reader: Reader, output: (value: T) => void) => void
+export type Serializer<T = unknown> = (writer: IWriter, value: T) => void
+export type Deserializer<T = unknown> = (reader: IReader, output: (value: T) => void) => void
 
 export interface Codec<T = unknown> {
   name: string
@@ -59,4 +58,3 @@ export class CodecRegistry {
   readonly messages = new CodecChannel()
   readonly exceptions = new CodecChannel()
 }
-

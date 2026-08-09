@@ -1,10 +1,9 @@
 import { CodecRegistry } from './codec.js'
-import { TypeKind } from './typeDescription.js'
+import type { IReader, ReadLater } from './writerTypes.js'
 
 type AssignAfterRead = (value: unknown) => void
-type ReadLater = (output: (value: unknown) => void) => void
 
-export class Reader {
+export class Reader implements IReader {
   private readonly bytes: Uint8Array
   private offset = 0
   private readonly view: DataView
@@ -32,6 +31,8 @@ export class Reader {
   enterFrame(): void {}
 
   exitFrame(): void {}
+
+  saveOffset(): void {}
 
   enterIndexedFrame(_id: number): void {
     throw new Error('Indexed frames are not supported in stream reader')
@@ -134,7 +135,23 @@ export class Reader {
     codec.deserialize(this, output)
   }
 
-  readPointer<T>(assign: (value: T) => void, readLater: (output: (value: T) => void) => void): void {
+  readMap(
+    readKey: (r: IReader, assign: (key: unknown) => void) => void,
+    readVal: (r: IReader, assign: (val: unknown) => void) => void
+  ): Array<[unknown, unknown]> {
+    const n = this.readLength()
+    const out: Array<[unknown, unknown]> = []
+    for (let i = 0; i < n; ++i) {
+      let key: unknown
+      let val: unknown
+      readKey(this, k => { key = k })
+      readVal(this, v => { val = v })
+      out.push([key, val])
+    }
+    return out
+  }
+
+  readPointer<T>(assign: (value: T) => void, readLater: ReadLater): void {
     const delta = this.readI32()
     if (delta === 0) {
       assign(null)

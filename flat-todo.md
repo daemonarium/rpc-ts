@@ -33,13 +33,13 @@ Obecny kod (do zachowania jako compressed path):
 | `src/SocketMessageChannel.ts` | `[len][type u64 varint][body][writeRest][payload]` |
 | `src/SocketRpcServer.ts` / `SocketRpcClient.ts` | RPC na `SocketMessageChannel` |
 
-Uwaga: mapy w `valueSerialization` są **interleaved** (compressed). Flat wymaga SoA (`writeMap`/`readMap`).
+Uwaga: mapy w `valueSerialization` idą przez `writeMap`/`readMap` (compressed = interleaved). Flat wymaga SoA w implementacji flat writer/reader.
 
 ---
 
 ## Pliki docelowe
 
-- [ ] `src/writerTypes.ts` — wspólny interfejs `IWriter` / `IReader` (kontrakt używany przez `valueSerialization`, codecs, channel)
+- [x] `src/writerTypes.ts` — wspólny interfejs `IWriter` / `IReader` (kontrakt używany przez `valueSerialization`, codecs, channel)
 - [ ] `src/flatEncoding.ts` — LE helpers, `offsetWidth` / `packFormat` / `unpackWidth`, trailer size
 - [ ] `src/flatWriter.ts` — flat writer na rosnącym `Uint8Array` (odpowiednik `flat_stream_writer` / buffer writer)
 - [ ] `src/flatReader.ts` — flat reader na `Uint8Array` / `ArrayBufferView` (materialized, skip trailera)
@@ -47,29 +47,32 @@ Uwaga: mapy w `valueSerialization` są **interleaved** (compressed). Flat wymaga
 - [ ] `src/flatLocalCircularBufferReader.ts` — flat peek reader na circular
 - [ ] (opcjonalnie) `src/flatModuleCircularBufferWriter.ts` / `…Reader.ts` — jeśli Module* potrzebują flat pod WASM
 - [ ] `src/flatMessageChannel.ts` — albo templatyzacja `SocketMessageChannel` policy flat
-- [ ] Eksporty w `src/index.ts`
-- [ ] Testy: `tests/flatSerialization.test.ts`, `tests/flatMessageChannel.test.ts`, `tests/flatSocketRpc.test.ts`
+- [x] Eksporty `IWriter`/`IReader` w `src/index.ts` (Faza 0); flat eksporty — Faza 1+
+- [x] Testy kontraktu: `tests/writerReaderContract.test.ts` (Faza 0)
+- [ ] Testy flat: `tests/flatSerialization.test.ts`, `tests/flatMessageChannel.test.ts`, `tests/flatSocketRpc.test.ts`
+- [x] `README.md` — architektura + kontrakt (Faza 0)
 - [ ] Ten plik — odhaczać w trakcie
 
 ---
 
-## Faza 0 — wspólny kontrakt (refactor przed flat)
+## Faza 0 — wspólny kontrakt (refactor przed flat) — **DONE**
 
 Minimalny refactor, żeby compressed i flat współdzieliły `valueSerialization` bez `as any`.
 
-- [ ] Wyciągnąć `IWriter` / `IReader` z metod używanych dziś przez `valueSerialization` + codecs:
+- [x] Wyciągnąć `IWriter` / `IReader` z metod używanych dziś przez `valueSerialization` + codecs:
   - skalary: `writeU64`…`writeBool` / `readU64`…`readBool`
   - `writeString` / `writeBinary` / `writeLength` (+ read)
   - `beginFrame` / `endFrame` / `saveOffset`
-  - `enterFrame` / `exitFrame` (reader)
+  - `enterFrame` / `exitFrame` / `saveOffset` (reader)
   - `writePointer` / `writeRest` / `readPointer` / `readRest`
   - `writeTyped` / `readTyped`
-  - **nowe:** `writeMap` / `readMap` (callbacki key/value)
-- [ ] `Writer` / `Reader` (compressed) implementują interfejs; `beginFrame`/`endFrame`/`saveOffset` nadal no-op
-- [ ] Compressed `writeMap`/`readMap` = obecny interleaved layout (pary key+value w pętli)
-- [ ] `valueSerialization`: `Map` przez `writeMap`/`readMap` zamiast ręcznej pętli + `beginFrame` wokół mapy
-- [ ] Typy `Serializer`/`Deserializer` w `codec.ts` oparte o `IWriter`/`IReader`
-- [ ] Regresja: istniejące `tests/serialization.test.ts`, `registrySerialization`, `socketMessageChannel`, `socketRpcServer`
+  - **`writeMap` / `readMap`** (callbacki key/value)
+- [x] `Writer` / `Reader` / `LocalCircularBuffer*` implementują interfejs; `beginFrame`/`endFrame`/`saveOffset` nadal no-op (compressed)
+- [x] Compressed `writeMap`/`readMap` = interleaved layout (pary key+value w pętli)
+- [x] `valueSerialization`: `Map` przez `writeMap`/`readMap`; `reader.saveOffset` po variable (mirror C++ `deserialize.hpp`)
+- [x] Typy `Serializer`/`Deserializer` w `codec.ts` oparte o `IWriter`/`IReader`
+- [x] Regresja: istniejące testy + `writerReaderContract.test.ts` (43 passing)
+- [x] `README.md` utworzony
 
 ---
 
@@ -203,13 +206,13 @@ Cel: `SocketRpcServer` / `SocketRpcClient` na flat message channel. Control mess
 
 ## Kolejność wdrożenia (checklist wykonawcza)
 
-1. [ ] Faza 0 — `IWriter`/`IReader` + `writeMap`/`readMap` compressed + regresja
+1. [x] Faza 0 — `IWriter`/`IReader` + `writeMap`/`readMap` compressed + regresja + README
 2. [ ] Faza 1.1–1.3 — `flatEncoding` + `FlatWriter`/`FlatReader`
 3. [ ] Faza 1.4–1.5 — valueSerialization + testy serializacji
 4. [ ] Faza 1.6 — circular flat local
 5. [ ] Faza 2 — flat message channel + testy
 6. [ ] Faza 3 — flat RPC + testy (+ cross C++ jeśli infrastruktura gotowa)
-7. [ ] Eksporty `index.ts` + krótka nota w README ts-rpc (jeśli istnieje) / komentarz w `SocketMessageChannel`
+7. [ ] Eksporty flat w `index.ts` (kontrakt IWriter już wyeksportowany w Fazie 0)
 
 ---
 

@@ -1,5 +1,4 @@
-import type { Reader } from './reader.js'
-import type { Writer } from './writer.js'
+import type { IWriter, IReader } from './writerTypes.js'
 import type { TypedValue } from './codec.js'
 import { TypeKind, type TypeDescription, type TypeMember, TypeRegistry } from './typeDescription.js'
 import { CodecRegistry } from './codec.js'
@@ -14,7 +13,7 @@ export type JsonValue =
   | bigint
   | TypedValue
 
-export const serializeTypedJson = (writer: Writer, registry: TypeRegistry, value: TypedValue): void => {
+export const serializeTypedJson = (writer: IWriter, registry: TypeRegistry, value: TypedValue): void => {
   const type = registry.getTypeByName(value._type)
   if (!type) {
     throw new Error(`Type ${value._type} not found in registry`)
@@ -22,7 +21,7 @@ export const serializeTypedJson = (writer: Writer, registry: TypeRegistry, value
   serializeValueByType(writer, registry, type, value)
 }
 
-export const deserializeTypedJson = (reader: Reader, registry: TypeRegistry, typeName: string): TypedValue => {
+export const deserializeTypedJson = (reader: IReader, registry: TypeRegistry, typeName: string): TypedValue => {
   const type = registry.getTypeByName(typeName)
   if (!type) {
     throw new Error(`Type ${typeName} not found in registry`)
@@ -33,7 +32,7 @@ export const deserializeTypedJson = (reader: Reader, registry: TypeRegistry, typ
   return result
 }
 
-export const serializeValueByType = (writer: Writer, registry: TypeRegistry, type: TypeDescription, value: JsonValue): void => {
+export const serializeValueByType = (writer: IWriter, registry: TypeRegistry, type: TypeDescription, value: JsonValue): void => {
   switch (type.kind) {
     case TypeKind.UnsignedInteger8:
       writer.writeU8(Number(toNumber(value, false)) & 0xff)
@@ -91,20 +90,17 @@ export const serializeValueByType = (writer: Writer, registry: TypeRegistry, typ
       writer.endFrame()
       writer.saveOffset()
       break
-    case TypeKind.Map:
-      writer.beginFrame()
-      {
-        const entries = extractEntries(value)
-        writer.writeLength(entries.length)
-        for (const [keyValue, entryValue] of entries) {
-          serializeValueByType(writer, registry, ensureType(type.key), keyValue)
-          serializeValueByType(writer, registry, ensureType(type.item), entryValue)
-        }
-      }
-      writer.endFrame()
+    case TypeKind.Map: {
+      const entries = extractEntries(value)
+      writer.writeMap(
+        entries,
+        (w, k) => serializeValueByType(w, registry, ensureType(type.key), k as JsonValue),
+        (w, v) => serializeValueByType(w, registry, ensureType(type.item), v as JsonValue)
+      )
       writer.saveOffset()
       break
-    case TypeKind.Object:      
+    }
+    case TypeKind.Object:
       serializeObject(writer, registry, type, value as Record<string, JsonValue>)
       break
     case TypeKind.DynamicObject:
@@ -133,7 +129,7 @@ export const serializeValueByType = (writer: Writer, registry: TypeRegistry, typ
   }
 }
 
-const serializeObject = (writer: Writer, registry: TypeRegistry, type: TypeDescription, value: Record<string, JsonValue>): void => {
+const serializeObject = (writer: IWriter, registry: TypeRegistry, type: TypeDescription, value: Record<string, JsonValue>): void => {
   const typed = value as Partial<TypedValue>
   if (typed._type && typed._type !== type.name) {
     throw new Error(`Expected value of type ${type.name}, got ${String(typed._type)}`)
@@ -149,7 +145,7 @@ const serializeObject = (writer: Writer, registry: TypeRegistry, type: TypeDescr
   writer.saveOffset()
 }
 
-export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, type: TypeDescription, output: (value: JsonValue) => void): void => {
+export const deserializeValueByType = (reader: IReader, registry: TypeRegistry, type: TypeDescription, output: (value: JsonValue) => void): void => {
   switch (type.kind) {
     case TypeKind.UnsignedInteger8:
       return output(reader.readU8())
@@ -173,10 +169,16 @@ export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, t
       return output(reader.readF64())
     case TypeKind.Boolean:
       return output(reader.readBool())
-    case TypeKind.String:
-      return output(reader.readString())
-    case TypeKind.Binary:
-      return output(reader.readBinary())
+    case TypeKind.String: {
+      const s = reader.readString()
+      reader.saveOffset()
+      return output(s)
+    }
+    case TypeKind.Binary: {
+      const b = reader.readBinary()
+      reader.saveOffset()
+      return output(b)
+    }
     case TypeKind.Enum:
       return output(resolveEnumValue(type, reader.readU64()))
     case TypeKind.Array:
@@ -188,31 +190,27 @@ export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, t
           deserializeValueByType(reader, registry, ensureType(type.item), (value) => result[i] = value)
         }
         reader.exitFrame()
+        reader.saveOffset()
         return output(result)
       }
-    case TypeKind.Map:
-      reader.enterFrame()
-      {
-        const length = reader.readLength()
-        const entries: Array<[JsonValue, JsonValue]> = new Array(length)
-        const keyType = ensureType(type.key)
-        const itemType = ensureType(type.item)
-        for (let i = 0; i < length; ++i) {
-          entries[i] = [undefined, undefined]
-          const key = deserializeValueByType(reader, registry, keyType, (value) => entries[i][0] = value)
-          const val = deserializeValueByType(reader, registry, itemType, (value) => entries[i][1] = value)          
+    case TypeKind.Map: {
+      const keyType = ensureType(type.key)
+      const itemType = ensureType(type.item)
+      const entries = reader.readMap(
+        (r, assign) => deserializeValueByType(r, registry, keyType, assign),
+        (r, assign) => deserializeValueByType(r, registry, itemType, assign)
+      ) as Array<[JsonValue, JsonValue]>
+      reader.saveOffset()
+      if (keyType.kind === TypeKind.String) {
+        const object: Record<string, JsonValue> = {}
+        for (const [k, v] of entries) {
+          object[String(k)] = v
         }
-        reader.exitFrame()
-        if (keyType.kind === TypeKind.String) {
-          const object: Record<string, JsonValue> = {}
-          for (const [k, v] of entries) {
-            object[String(k)] = v
-          }
-          return output(object)
-        }
-        output(new Map(entries))
-        return
+        return output(object)
       }
+      output(new Map(entries))
+      return
+    }
     case TypeKind.Object:
       reader.enterFrame()
       {
@@ -222,6 +220,7 @@ export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, t
           deserializeValueByType(reader, registry, member.type, (value) => result[member.name] = value)
         }
         reader.exitFrame()
+        reader.saveOffset()
         output(result as TypedValue)
         return
       }
@@ -235,6 +234,7 @@ export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, t
           })
         }
         reader.exitFrame()
+        reader.saveOffset()
         output(result as TypedValue)
         return
       }
@@ -247,6 +247,7 @@ export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, t
           deserializeValueByType(reader, registry, member.type, (value) => result[member.name] = value)
         }
         reader.exitFrame()
+        reader.saveOffset()
         output(result as TypedValue)
         return
       }
@@ -259,14 +260,14 @@ export const deserializeValueByType = (reader: Reader, registry: TypeRegistry, t
           deserializeValueByType(reader, registry, member.type, (value) => result[member.name] = value)
         }
         reader.exitFrame()
+        reader.saveOffset()
         output(result as TypedValue)
         return
       }
     case TypeKind.Pointer: {
-      const placeholder: Record<string, unknown> = {}
       reader.readPointer(
         (value) => output(value as TypedValue),
-        (output) => reader.readTyped(output)
+        (out) => reader.readTyped(out)
       )
       return
     }
