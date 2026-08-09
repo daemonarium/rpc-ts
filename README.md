@@ -13,9 +13,9 @@ Warstwa typów (`serializeValueByType` / `deserializeValueByType`) nie zna forma
 
 | | Compressed | Flat |
 |--|------------|------|
-| Status | zaimplementowany (domyślny) | w toku — [flat-todo.md](flat-todo.md) |
+| Status | zaimplementowany (domyślny) | serializacja zaimplementowana (ArrayBuffer + circular); message/RPC — Fazy 2–3 — [flat-todo.md](flat-todo.md) |
 | Liczby | varint / sortowalny float | fixed LE (jak C++) |
-| Mapy | interleaved (`length` + pary) | SoA (Faza 1) |
+| Mapy | interleaved (`length` + pary) | SoA |
 | Ramki | `beginFrame` / `endFrame` / `saveOffset` = no-op | trailery checkpointów |
 | Odczyt | zawsze materialized | zawsze materialized (brak `flat_view` w TS) |
 
@@ -35,8 +35,8 @@ Specyfikacja wire flat: [../cpp-rpc/flat-format.md](../cpp-rpc/flat-format.md). 
 └────────────────────────────┬────────────────────────────┘
          ┌───────────────────┼───────────────────┐
          ▼                   ▼                   ▼
-   Writer / Reader   LocalCircularBuffer*   (Flat* — Faza 1)
-   (ArrayBuffer)     (socket buffers)
+   Writer / Reader   LocalCircularBuffer*   FlatWriter / FlatReader /
+   (ArrayBuffer)     (socket buffers)       FlatLocalCircularBuffer*
 ```
 
 ### Kontrakt `IWriter` / `IReader`
@@ -50,7 +50,7 @@ Obowiązkowe metody (używane przez `valueSerialization` i codecs):
 - `writeTyped` / `readTyped`
 - **`writeMap` / `readMap`** — layout zależy od backendu:
   - compressed: `writeLength(n)` + interleaved key/value callbacks (jak C++ `stream_writer::write_map`)
-  - flat (Faza 1): SoA wg `flat-format.md`
+  - flat: SoA wg `flat-format.md` (`FlatWriter` / `FlatReader` / circular)
 
 `ModuleCircularBufferWriter` / `Reader` to niskopoziomowe poke/peek (nie pełny kontrakt) — używane do surowego I/O, nie przez `valueSerialization`.
 
@@ -71,4 +71,4 @@ Flat message/RPC: Fazy 2–3 w [flat-todo.md](flat-todo.md).
 cd ts-rpc && npm test
 ```
 
-Pokrycie m.in.: golden compressed vs C++, circular buffer, message channel, RPC, kontrakt `IWriter`/`IReader` (`writerReaderContract.test.ts`).
+Pokrycie m.in.: golden compressed vs C++, circular buffer, message channel, RPC, kontrakt `IWriter`/`IReader` (`writerReaderContract.test.ts`), flat LE / SoA / pointer (`flatSerialization.test.ts`).

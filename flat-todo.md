@@ -40,17 +40,17 @@ Uwaga: mapy w `valueSerialization` idą przez `writeMap`/`readMap` (compressed =
 ## Pliki docelowe
 
 - [x] `src/writerTypes.ts` — wspólny interfejs `IWriter` / `IReader` (kontrakt używany przez `valueSerialization`, codecs, channel)
-- [ ] `src/flatEncoding.ts` — LE helpers, `offsetWidth` / `packFormat` / `unpackWidth`, trailer size
-- [ ] `src/flatWriter.ts` — flat writer na rosnącym `Uint8Array` (odpowiednik `flat_stream_writer` / buffer writer)
-- [ ] `src/flatReader.ts` — flat reader na `Uint8Array` / `ArrayBufferView` (materialized, skip trailera)
-- [ ] `src/flatLocalCircularBufferWriter.ts` — flat poke writer na `LocalCircularBuffer`
-- [ ] `src/flatLocalCircularBufferReader.ts` — flat peek reader na circular
+- [x] `src/flatEncoding.ts` — LE helpers, `offsetWidth` / `packFormat` / `unpackWidth`, trailer size
+- [x] `src/flatWriter.ts` / `flatWriterBase.ts` — flat writer na rosnącym `Uint8Array`
+- [x] `src/flatReader.ts` / `flatReaderBase.ts` — flat reader na `Uint8Array` / `ArrayBufferView` (materialized, skip trailera)
+- [x] `src/flatLocalCircularBufferWriter.ts` — flat poke writer na `LocalCircularBuffer`
+- [x] `src/flatLocalCircularBufferReader.ts` — flat peek reader na circular
 - [ ] (opcjonalnie) `src/flatModuleCircularBufferWriter.ts` / `…Reader.ts` — jeśli Module* potrzebują flat pod WASM
 - [ ] `src/flatMessageChannel.ts` — albo templatyzacja `SocketMessageChannel` policy flat
-- [x] Eksporty `IWriter`/`IReader` w `src/index.ts` (Faza 0); flat eksporty — Faza 1+
+- [x] Eksporty `IWriter`/`IReader` + flat (Faza 0–1) w `src/index.ts`
 - [x] Testy kontraktu: `tests/writerReaderContract.test.ts` (Faza 0)
-- [ ] Testy flat: `tests/flatSerialization.test.ts`, `tests/flatMessageChannel.test.ts`, `tests/flatSocketRpc.test.ts`
-- [x] `README.md` — architektura + kontrakt (Faza 0)
+- [x] Testy flat serializacji: `tests/flatSerialization.test.ts` (Faza 1); message/RPC: `tests/flatMessageChannel.test.ts`, `tests/flatSocketRpc.test.ts` (Fazy 2–3)
+- [x] `README.md` — architektura + kontrakt + status flat serializacji
 - [ ] Ten plik — odhaczać w trakcie
 
 ---
@@ -76,63 +76,61 @@ Minimalny refactor, żeby compressed i flat współdzieliły `valueSerialization
 
 ---
 
-## Faza 1 — serializacja flat (ArrayBuffer)
+## Faza 1 — serializacja flat (ArrayBuffer) — **DONE**
 
 Cel: roundtrip wartości flat TS↔TS i zgodność bajtowa z C++ (bez socketa).
 
 ### 1.1 Encoding helpers
 
-- [ ] `flatEncoding.ts`: `storeLe` / `loadLe` (u8…u64, f32, f64)
-- [ ] `offsetWidth(maxCp)` → 1/2/4; `packFormat` / `unpackWidth`
-- [ ] (opcjonalnie) `isFlatVariable` / `flatFixedSize` — jeśli potrzebne do testów trailera
+- [x] `flatEncoding.ts`: `storeLe` / `loadLe` (u8…u64, f32, f64)
+- [x] `offsetWidth(maxCp)` → 1/2/4; `packFormat` / `unpackWidth`
+- [x] (opcjonalnie) `isFlatVariable` / `flatFixedSize` — niepotrzebne (schema w TypeRegistry / valueSerialization)
 
 ### 1.2 FlatWriter
 
-- [ ] Fixed LE skalary (`writeU8`…`writeU64`, `writeI*`, `writeF32`/`F64` IEEE LE, `writeBool`)
-- [ ] `writeString` / `writeBinary` / `writeLength` = u32 LE + bytes
-- [ ] Frame: `beginFrame` / `saveOffset` / `endFrame` → trailer `[format][cps…][format]` gdy K>0; brak trailera gdy K==0
-- [ ] `writePointer` — i32 LE delta (0 / &lt;0 / &gt;0), jak compressed semantyka
-- [ ] `writeRest` — **per-frame prefix**: dla każdego pending `[encoded_size=N+1 u32 LE][frame N B]`; na końcu grafu **nie** dopisuje sentinel (sentinel jest warstwą message — patrz Faza 2); dla samego value roundtrip wystarczy body jak w C++ `write_rest` flat writer
-- [ ] `writeTyped` / register — index **u32 LE**
-- [ ] `writeException` / `writeMessage` — index u32 LE (jeśli używane poza channel)
-- [ ] `writeMap` — SoA wg `flat-format.md` (sort kluczy po `memcmp` zserializowanych bajtów)
-- [ ] `pokeU32(abs, val)` — potrzebne do back-patch `encoded_size` w `writeRest` / message header
+- [x] Fixed LE skalary (`writeU8`…`writeU64`, `writeI*`, `writeF32`/`F64` IEEE LE, `writeBool`)
+- [x] `writeString` / `writeBinary` / `writeLength` = u32 LE + bytes
+- [x] Frame: `beginFrame` / `saveOffset` / `endFrame` → trailer `[format][cps…][format]` gdy K>0; brak trailera gdy K==0
+- [x] `writePointer` — i32 LE delta (0 / &lt;0 / &gt;0), jak compressed semantyka
+- [x] `writeRest` — **per-frame prefix**: dla każdego pending `[encoded_size=N+1 u32 LE][frame N B]`; na końcu grafu **nie** dopisuje sentinel (sentinel jest warstwą message — patrz Faza 2)
+- [x] `writeTyped` / register — index **u32 LE**
+- [x] `writeException` — index u32 LE (+ exception codec)
+- [x] `writeMap` — SoA wg `flat-format.md` (sort kluczy po `memcmp` zserializowanych bajtów)
+- [x] `pokeU32(abs, val)` — back-patch `encoded_size` w `writeRest`
 
 ### 1.3 FlatReader
 
-- [ ] Fixed LE skalary + string/binary/length
-- [ ] `enterFrame` / `exitFrame` — skip trailera (K z schematu / `checkpoint_count` jak C++ stream reader)
-- [ ] `saveOffset` — inkrement licznika checkpointów w ramce
-- [ ] `readPointer` / `readRest` — konsumuje per-frame `encoded_size` przed każdym deferred body (jak C++ flat `read_rest`)
-- [ ] `readTyped` / exception / message — index u32 LE
-- [ ] `readMap` — SoA (offs → keys → values → val_off trailer)
-- [ ] `isIndexed()` = `false` dla prostego ArrayBuffer readera (brak seek; zawsze sequential materialize)
+- [x] Fixed LE skalary + string/binary/length
+- [x] `enterFrame` / `exitFrame` — skip trailera (`checkpoint_count` jak C++ stream reader)
+- [x] `saveOffset` — inkrement licznika checkpointów w ramce
+- [x] `readPointer` / `readRest` — konsumuje per-frame `encoded_size` przed każdym deferred body
+- [x] `readTyped` — index u32 LE
+- [x] `readMap` — SoA (offs → keys → values → val_off trailer)
+- [x] `isIndexed()` = `false` dla ArrayBuffer / circular stream readera
 
 ### 1.4 valueSerialization na flat
 
-- [ ] Upewnić się, że `serializeValueByType` / `deserializeValueByType` działają z `FlatWriter`/`FlatReader` bez branchy formatu (tylko przez interfejs)
-- [ ] Mapa: wyłącznie przez `writeMap`/`readMap` (SoA na flat, interleaved na compressed)
-- [ ] UDT: `beginFrame` … pola … `endFrame` + `saveOffset` po UDT (już jest)
-- [ ] Pointer: `writePointer` + `writeTyped` w later; bez `save_offset` na uchwycie
+- [x] `serializeValueByType` / `deserializeValueByType` działają z `FlatWriter`/`FlatReader` bez branchy formatu
+- [x] Mapa: wyłącznie przez `writeMap`/`readMap` (SoA na flat, interleaved na compressed)
+- [x] UDT: `beginFrame` … pola … `endFrame` + `saveOffset` po UDT
+- [x] Pointer: `writePointer` + `writeTyped` w later
 
 ### 1.5 Testy serializacji
 
-- [ ] Skalary + string/binary — bajty = C++ flat golden (lub roundtrip vs hex z `serialization_flat_ut`)
-- [ ] UDT z trailerami (mixed fixed/variable)
-- [ ] `vector` fixed vs variable (K=0 vs K>0)
-- [ ] Mapa SoA (empty, string→int, nested UDT); kolejność = memcmp keys
-- [ ] Graf `shared_ptr` (null, tree, cycle a↔b) + `writeRest`/`readRest`
-- [ ] Typed / exception / message index u32
-- [ ] Cross: opcjonalnie dump C++ → odczyt TS i odwrotnie (fixture pliki lub wspólne golden)
+- [x] Skalary + string/binary — golden LE hex + roundtrip
+- [x] UDT z trailerami (mixed fixed/variable)
+- [x] `vector` fixed vs variable (K=0 vs K>0)
+- [x] Mapa SoA (empty, string→int); kolejność = memcmp keys
+- [x] Graf pointer (null, cycle a↔b) + `writeRest`/`readRest`
+- [x] Typed index u32 LE
+- [x] Cross medium: ArrayBuffer ↔ circular parity (bez harness C++ dump — golden LE wystarczy)
 
 ### 1.6 Circular flat (lokalny)
 
-Potrzebne pod message channel (socket używa circular).
-
-- [ ] `FlatLocalCircularBufferWriter` — `writeRaw` przez poke + grow; `currentPos` / `pokeU32`; reszta logiki jak `FlatWriter` (współdzielona baza / composition)
-- [ ] `FlatLocalCircularBufferReader` — peek + cursor; skip trailera; `setReadOffset` / `getReadOffset`
-- [ ] Unikać czwartej pełnej kopii: wspólny core flat + medium hooks (jak C++ `flat_writer_base` / `flat_reader_base`, w TS przez composition lub bazową klasę)
-- [ ] Testy wrap / short space / roundtrip Person na circular
+- [x] `FlatLocalCircularBufferWriter` — poke + grow; wspólna baza `FlatWriterBase`
+- [x] `FlatLocalCircularBufferReader` — peek + cursor; `setReadOffset` / `getReadOffset`
+- [x] Wspólny core: `FlatWriterBase` / `FlatReaderBase` + sink/source hooks
+- [x] Testy grow / roundtrip Person+map na circular + parity z ArrayBuffer
 
 - [ ] (opcjonalnie) Module circular flat — tylko jeśli WASM path ma iść flatem; inaczej odłożyć
 

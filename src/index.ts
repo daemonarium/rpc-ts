@@ -8,6 +8,25 @@ export { ModuleCircularBufferReader } from './ModuleCircularBufferReader.js'
 export { ModuleCircularBufferWriter } from './ModuleCircularBufferWriter.js'
 export { LocalCircularBufferReader } from './LocalCircularBufferReader.js'
 export { LocalCircularBufferWriter } from './LocalCircularBufferWriter.js'
+export {
+  offsetWidth,
+  packFormat,
+  unpackWidth,
+  trailerSize,
+  storeLeU8, storeLeI8, storeLeU16, storeLeI16, storeLeU32, storeLeI32,
+  storeLeU64, storeLeI64, storeLeF32, storeLeF64,
+  loadLeU8, loadLeI8, loadLeU16, loadLeI16, loadLeU32, loadLeI32,
+  loadLeU64, loadLeI64, loadLeF32, loadLeF64,
+  appendOffsetTable,
+  appendOffsetTrailer,
+  FLAT_FORMAT_WIDTH_U8,
+  FLAT_FORMAT_WIDTH_U16,
+  FLAT_FORMAT_WIDTH_U32,
+} from './flatEncoding.js'
+export { FlatWriter } from './flatWriter.js'
+export { FlatReader } from './flatReader.js'
+export { FlatLocalCircularBufferWriter } from './flatLocalCircularBufferWriter.js'
+export { FlatLocalCircularBufferReader } from './flatLocalCircularBufferReader.js'
 export type { Socket } from './Socket.js'
 export { ModuleSockets, ModuleSocket, SOCKET_FLAG_OPEN, SOCKET_FLAG_READABLE, SOCKET_FLAG_WRITABLE, SOCKET_FLAG_ERROR } from './ModuleSockets.js'
 export { LocalSocket } from './LocalSocket.js'
