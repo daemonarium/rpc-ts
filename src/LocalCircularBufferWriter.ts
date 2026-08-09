@@ -216,6 +216,10 @@ export class LocalCircularBufferWriter implements IWriter {
     }
   }
 
+  deferredPointerUsesTypeIndex(): boolean {
+    return true
+  }
+
   private writeLittleEndianUint64(value: bigint): void {
     this.ensureWritable(8)
     const bytes = new Uint8Array(8)

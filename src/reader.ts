@@ -28,6 +28,10 @@ export class Reader implements IReader {
     return false
   }
 
+  deferredPointerUsesTypeIndex(): boolean {
+    return true
+  }
+
   enterFrame(): void {}
 
   exitFrame(): void {}

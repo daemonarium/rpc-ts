@@ -121,7 +121,17 @@ export const serializeValueByType = (writer: IWriter, registry: TypeRegistry, ty
       if (!typed || typeof typed._type !== 'string') {
         throw new Error('Pointer value must provide _type')
       }
-      writer.writePointer(typed, () => writer.writeTyped(typed))
+      if (writer.deferredPointerUsesTypeIndex()) {
+        writer.writePointer(typed, () => writer.writeTyped(typed))
+      } else {
+        const pointeeType = type.item ?? registry.getTypeByName(typed._type)
+        if (!pointeeType) {
+          throw new Error(`Flat pointer deferred body requires pointee type for ${typed._type}`)
+        }
+        writer.writePointer(typed, () => {
+          serializeValueByType(writer, registry, pointeeType, typed)
+        })
+      }
       break
     }
     default:
@@ -265,10 +275,23 @@ export const deserializeValueByType = (reader: IReader, registry: TypeRegistry, 
         return
       }
     case TypeKind.Pointer: {
-      reader.readPointer(
-        (value) => output(value as TypedValue),
-        (out) => reader.readTyped(out)
-      )
+      if (reader.deferredPointerUsesTypeIndex()) {
+        reader.readPointer(
+          (value) => output(value as TypedValue),
+          (out) => reader.readTyped(out)
+        )
+      } else {
+        const pointeeType = type.item
+        if (!pointeeType) {
+          throw new Error(`Flat pointer deferred body requires type.item for ${type.name}`)
+        }
+        reader.readPointer(
+          (value) => output(value as TypedValue),
+          (out) => {
+            deserializeValueByType(reader, registry, pointeeType, out)
+          }
+        )
+      }
       return
     }
     default:

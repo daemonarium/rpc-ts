@@ -51,6 +51,11 @@ export { RawRpcClient } from './RawRpcClient.js'
 export { RpcException } from './RpcException.js'
 export type { RpcClient } from './RpcClient.js'
 export { SocketMessageChannel, type SocketMessageChannelSocket } from './SocketMessageChannel.js'
+export { FlatSocketMessageChannel } from './FlatSocketMessageChannel.js'
+export {
+  SocketMessageChannelBase,
+  SOCKET_MESSAGE_LENGTH_SIZE,
+} from './socketMessageFraming.js'
 export {
   ensureRpcTypesInRegistry,
   ensureRpcCodecs,

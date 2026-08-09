@@ -267,19 +267,26 @@ describe('flat pointer graph', () => {
       kind: TypeKind.DynamicObject,
       members: [
         { name: 'label', type: registry.getTypeByName('string')!, annotations: [] },
-        { name: 'next', type: registry.getTypeByName('pointer')!, annotations: [] },
       ],
     })
+    // Flat deferred pointers omit type index; pointee comes from schema (type.item).
+    const nodePtr = TypeDescription.create({
+      name: 'node*',
+      kind: TypeKind.Pointer,
+      item: nodeType,
+    })
+    nodeType.members.push({ name: 'next', type: nodePtr, annotations: [] })
     const rootType = TypeDescription.create({
       name: 'root',
       kind: TypeKind.Object,
       members: [
-        { name: 'head', type: registry.getTypeByName('pointer')!, annotations: [] },
-        { name: 'nullRef', type: registry.getTypeByName('pointer')!, annotations: [] },
+        { name: 'head', type: nodePtr, annotations: [] },
+        { name: 'nullRef', type: nodePtr, annotations: [] },
       ],
     })
     registry.registerType(rootType)
     registry.registerType(nodeType)
+    registry.registerType(nodePtr)
 
     const codecs = new CodecRegistry()
     registerDynamicCodecs(codecs, registry)

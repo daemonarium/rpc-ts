@@ -64,4 +64,9 @@ export class FlatLocalCircularBufferWriter extends FlatWriterBase {
   getOffset(): number {
     return this.offsetRef.offset
   }
+
+  /** Back-patch a u32 LE at an absolute poke offset (e.g. encoded_size_0). */
+  pokeU32(absOffset: number, value: number): void {
+    this.sink.pokeU32(absOffset, value)
+  }
 }

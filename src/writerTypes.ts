@@ -34,6 +34,11 @@ export interface IWriter {
   writeTyped(value: TypedWriteValue): void
   writePointer(value: unknown, writeLater: WriteLater): void
   writeRest(): void
+  /**
+   * When true (compressed), deferred pointer bodies use writeTyped (type index on wire).
+   * When false (flat), deferred bodies are homogeneous serialize without type index.
+   */
+  deferredPointerUsesTypeIndex(): boolean
   writeMap(
     entries: ReadonlyArray<[unknown, unknown]>,
     writeKey: (w: IWriter, key: unknown) => void,
@@ -68,6 +73,10 @@ export interface IReader {
   readTyped<T>(output: (value: T) => void): void
   readPointer<T>(assign: (value: T) => void, readLater: ReadLater): void
   readRest(): void
+  /**
+   * Mirror of IWriter.deferredPointerUsesTypeIndex for deserialize path.
+   */
+  deferredPointerUsesTypeIndex(): boolean
   readMap(
     readKey: (r: IReader, assign: (key: unknown) => void) => void,
     readVal: (r: IReader, assign: (val: unknown) => void) => void

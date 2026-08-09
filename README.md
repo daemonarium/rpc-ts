@@ -13,7 +13,7 @@ Warstwa typów (`serializeValueByType` / `deserializeValueByType`) nie zna forma
 
 | | Compressed | Flat |
 |--|------------|------|
-| Status | zaimplementowany (domyślny) | serializacja zaimplementowana (ArrayBuffer + circular); message/RPC — Fazy 2–3 — [flat-todo.md](flat-todo.md) |
+| Status | zaimplementowany (domyślny) | serializacja + message channel; RPC — Faza 3 — [flat-todo.md](flat-todo.md) |
 | Liczby | varint / sortowalny float | fixed LE (jak C++) |
 | Mapy | interleaved (`length` + pary) | SoA |
 | Ramki | `beginFrame` / `endFrame` / `saveOffset` = no-op | trailery checkpointów |
@@ -50,7 +50,7 @@ Fixture Person: wspólny Rng w [`cpp-rpc/src/test/person_fixture.hpp`](../cpp-rp
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  SocketRpcServer / SocketRpcClient / SocketMessageChannel│
+│  SocketRpc* / SocketMessageChannel / FlatSocketMessage… │
 └────────────────────────────┬────────────────────────────┘
                              │ codecs + valueSerialization
 ┌────────────────────────────▼────────────────────────────┐
@@ -81,10 +81,9 @@ Obowiązkowe metody (używane przez `valueSerialization` i codecs):
 
 ## Message / RPC
 
-- [`SocketMessageChannel`](src/SocketMessageChannel.ts) — length-prefixed frames: `[len 4B LE][type u64 varint][body][writeRest][payload]` (compressed)
-- [`SocketRpcServer`](src/SocketRpcServer.ts) / [`SocketRpcClient`](src/SocketRpcClient.ts) — RPC na tym kanale; typy `rpc_request` / `rpc_response` / `rpc_error`
-
-Flat message/RPC: Fazy 2–3 w [flat-todo.md](flat-todo.md).
+- [`SocketMessageChannel`](src/SocketMessageChannel.ts) — compressed: `[len 4B LE][type u64 varint][body][writeRest][payload]`
+- [`FlatSocketMessageChannel`](src/FlatSocketMessageChannel.ts) — flat: `[len][type u32 LE][encoded_size_0][root][writeRest…][sentinel 0][payload]` (wspólne framing: [`socketMessageFraming.ts`](src/socketMessageFraming.ts))
+- [`SocketRpcServer`](src/SocketRpcServer.ts) / [`SocketRpcClient`](src/SocketRpcClient.ts) — RPC na compressed `SocketMessageChannel`; flat RPC = Faza 3
 
 ---
 
@@ -94,4 +93,4 @@ Flat message/RPC: Fazy 2–3 w [flat-todo.md](flat-todo.md).
 cd ts-rpc && npm test
 ```
 
-Pokrycie m.in.: golden compressed vs C++, flat skalarne, Person value/graph cross-lang (`serializationComplex.test.ts`), circular buffer, message channel, RPC, kontrakt `IWriter`/`IReader`, flat LE smoke (`flatSerialization.test.ts`).
+Pokrycie m.in.: golden compressed vs C++, flat skalarne, Person value/graph cross-lang (`serializationComplex.test.ts`), circular buffer, message channel (compressed + flat), RPC, kontrakt `IWriter`/`IReader`, flat LE smoke (`flatSerialization.test.ts`).

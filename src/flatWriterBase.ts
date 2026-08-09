@@ -32,6 +32,10 @@ export class FlatWriterBase implements IWriter {
     protected readonly codecs: CodecRegistry
   ) {}
 
+  deferredPointerUsesTypeIndex(): boolean {
+    return false
+  }
+
   beginFrame(): void {
     this.frames.push({ start: this.sink.currentPos(), cps: [] })
   }

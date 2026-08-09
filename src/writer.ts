@@ -175,6 +175,10 @@ export class Writer implements IWriter {
     }
   }
 
+  deferredPointerUsesTypeIndex(): boolean {
+    return true
+  }
+
   private writeLittleEndianUint64(value: bigint): void {
     this.ensureCapacity(8)
     for (let i = 0; i < 8; ++i) {

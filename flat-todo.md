@@ -46,11 +46,11 @@ Uwaga: mapy w `valueSerialization` idą przez `writeMap`/`readMap` (compressed =
 - [x] `src/flatLocalCircularBufferWriter.ts` — flat poke writer na `LocalCircularBuffer`
 - [x] `src/flatLocalCircularBufferReader.ts` — flat peek reader na circular
 - [ ] (opcjonalnie) `src/flatModuleCircularBufferWriter.ts` / `…Reader.ts` — jeśli Module* potrzebują flat pod WASM
-- [ ] `src/flatMessageChannel.ts` — albo templatyzacja `SocketMessageChannel` policy flat
-- [x] Eksporty `IWriter`/`IReader` + flat (Faza 0–1) w `src/index.ts`
+- [x] `src/FlatSocketMessageChannel.ts` — framing + flat body policy (`socketMessageFraming.ts`)
+- [x] Eksporty `IWriter`/`IReader` + flat (Faza 0–1) + `FlatSocketMessageChannel` (Faza 2) w `src/index.ts`
 - [x] Testy kontraktu: `tests/writerReaderContract.test.ts` (Faza 0)
-- [x] Testy flat serializacji: `tests/flatSerialization.test.ts` (Faza 1); message/RPC: `tests/flatMessageChannel.test.ts`, `tests/flatSocketRpc.test.ts` (Fazy 2–3)
-- [x] `README.md` — architektura + kontrakt + status flat serializacji
+- [x] Testy flat serializacji: `tests/flatSerialization.test.ts` (Faza 1); message: `tests/flatMessageChannel.test.ts` (Faza 2); RPC: `tests/flatSocketRpc.test.ts` (Faza 3)
+- [x] `README.md` — architektura + kontrakt + status flat serializacji / message channel
 - [ ] Ten plik — odhaczać w trakcie
 
 ---
@@ -113,7 +113,7 @@ Cel: roundtrip wartości flat TS↔TS i zgodność bajtowa z C++ (bez socketa).
 - [x] `serializeValueByType` / `deserializeValueByType` działają z `FlatWriter`/`FlatReader` bez branchy formatu
 - [x] Mapa: wyłącznie przez `writeMap`/`readMap` (SoA na flat, interleaved na compressed)
 - [x] UDT: `beginFrame` … pola … `endFrame` + `saveOffset` po UDT
-- [x] Pointer: `writePointer` + `writeTyped` w later
+- [x] Pointer: deferred body — compressed `writeTyped`; flat `serializeValueByType` bez type index (`deferredPointerUsesTypeIndex`)
 
 ### 1.5 Testy serializacji
 
@@ -137,38 +137,38 @@ Cel: roundtrip wartości flat TS↔TS i zgodność bajtowa z C++ (bez socketa).
 
 ---
 
-## Faza 2 — message channel flat
+## Faza 2 — message channel flat — **DONE**
 
 Cel: length-prefixed messages zgodne z C++ `flat_materialized_codec` + framing (bez zero-copy codec).
 
 ### 2.1 Framing / policy
 
-- [ ] Wydzielić z `SocketMessageChannel` wspólne: length prefix, flush, drain, dispatch table, `onMessage`, payload size
-- [ ] Policy **compressed** (obecne zachowanie):
+- [x] Wydzielić z `SocketMessageChannel` wspólne: length prefix, flush, drain, dispatch table, `onMessage`, payload size (`socketMessageFraming.ts`)
+- [x] Policy **compressed** (obecne zachowanie):
   - send: `writeU64(typeIndex)` + serialize + `writeRest`
   - recv: `readU64()` + deserialize + `readRest`; `payloadSize = msgLen - offset`
-- [ ] Policy **flat**:
+- [x] Policy **flat**:
   - send: `writeU32(typeIndex)` + placeholder `encoded_size_0` + serialize root + `writeRest` (sub-frames z prefixami) + `writeU32(0)` sentinel; back-patch `encoded_size_0`; potem length + flush
   - recv: `readU32(typeIndex)` + `readU32(encoded_size_0)` + deserialize root + `readRest` + `readU32(sentinel==0)`; `payloadSize = msgLen - offset`
-- [ ] Alias / API:
-  - `SocketMessageChannel` = compressed (backward compatible), **albo** factory `createSocketMessageChannel(socket, codecs, 'compressed'|'flat')`
-  - `FlatSocketMessageChannel` jeśli osobna klasa czytelniejsza
+- [x] Alias / API:
+  - `SocketMessageChannel` = compressed (backward compatible)
+  - `FlatSocketMessageChannel` — osobna klasa
 
 ### 2.2 Root / shared graph na message
 
 Zgodnie z C++ flat message:
 
-- [ ] Root nie jest `writePointer` — serialize body + mark root w `writtenPointers` gdy root to shared graph (jeśli TS modeluje pointer root); dla zwykłych message objects (RPC structs) — plain serialize w frame 0
-- [ ] Sub-frames tylko z `writeRest` (homogeniczny typed graph)
-- [ ] Payload surowy po sentinel — handler dostaje `payloadSize`; odczyt payloadu przez reader channela
+- [x] Root nie jest `writePointer` — plain serialize w frame 0 (RPC/message structs)
+- [x] Sub-frames tylko z `writeRest` (homogeniczny typed graph; flat pointer bez type index)
+- [x] Payload surowy po sentinel — handler dostaje `payloadSize`; odczyt payloadu przez reader channela
 
 ### 2.3 Testy message
 
-- [ ] Ping/Pong roundtrip flat (LocalSocket loopback)
-- [ ] Payload dołączony do wiadomości
-- [ ] Wiele typów w dispatch table (kolejność indexów = rejestracja)
-- [ ] Graf w body wiadomości (jeśli typ ma pointery)
-- [ ] Zgodność z C++: TS flat channel ↔ C++ `socket_message_framing<flat_materialized_codec>` (opcjonalnie natywny helper / golden frame)
+- [x] Ping/Pong roundtrip flat (LocalSocket loopback)
+- [x] Payload dołączony do wiadomości
+- [x] Wiele typów w dispatch table (kolejność indexów = rejestracja)
+- [x] Graf w body wiadomości (vector pointer + cycle)
+- [x] Layout golden (typeIndex / encoded_size_0 / sentinel); opcjonalny TSV z C++ generatora — odłożony
 
 ---
 
@@ -206,12 +206,12 @@ Cel: `SocketRpcServer` / `SocketRpcClient` na flat message channel. Control mess
 ## Kolejność wdrożenia (checklist wykonawcza)
 
 1. [x] Faza 0 — `IWriter`/`IReader` + `writeMap`/`readMap` compressed + regresja + README
-2. [ ] Faza 1.1–1.3 — `flatEncoding` + `FlatWriter`/`FlatReader`
-3. [ ] Faza 1.4–1.5 — valueSerialization + testy serializacji
-4. [ ] Faza 1.6 — circular flat local
-5. [ ] Faza 2 — flat message channel + testy
+2. [x] Faza 1.1–1.3 — `flatEncoding` + `FlatWriter`/`FlatReader`
+3. [x] Faza 1.4–1.5 — valueSerialization + testy serializacji
+4. [x] Faza 1.6 — circular flat local
+5. [x] Faza 2 — flat message channel + testy
 6. [ ] Faza 3 — flat RPC + testy (+ cross C++ jeśli infrastruktura gotowa)
-7. [ ] Eksporty flat w `index.ts` (kontrakt IWriter już wyeksportowany w Fazie 0)
+7. [x] Eksporty flat w `index.ts` (kontrakt IWriter już wyeksportowany w Fazie 0; channel Faza 2)
 
 ---
 

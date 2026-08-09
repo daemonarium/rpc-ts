@@ -36,6 +36,10 @@ export class FlatReaderBase implements IReader {
     return false
   }
 
+  deferredPointerUsesTypeIndex(): boolean {
+    return false
+  }
+
   enterFrame(): void {
     this.frames.push({ checkpointCount: 0 })
   }

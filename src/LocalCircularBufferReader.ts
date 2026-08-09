@@ -29,6 +29,10 @@ export class LocalCircularBufferReader implements IReader {
     return false
   }
 
+  deferredPointerUsesTypeIndex(): boolean {
+    return true
+  }
+
   enterFrame(): void {}
 
   exitFrame(): void {}
