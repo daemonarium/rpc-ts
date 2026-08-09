@@ -23,6 +23,29 @@ Specyfikacja wire flat: [../cpp-rpc/flat-format.md](../cpp-rpc/flat-format.md). 
 
 ---
 
+## Goldeny vs cpp-rpc
+
+Checked-in TSV (źródło prawdy = C++ generators w `build/tests/`):
+
+| Plik | Zawartość |
+|------|-----------|
+| [`tests/serialization_reference.tsv`](tests/serialization_reference.tsv) | skalarne compressed |
+| [`tests/serialization_flat_reference.tsv`](tests/serialization_flat_reference.tsv) | skalarne flat LE |
+| [`tests/serialization_complex_reference.tsv`](tests/serialization_complex_reference.tsv) | Person value/graph compressed+flat |
+
+Regeneracja (wymaga reflection clang build, katalog `build/`):
+
+```bash
+cmake --build build --target generate_serialization_tsv generate_serialization_complex_tsv
+./build/tests/generate_serialization_tsv ts-rpc/tests/serialization_reference.tsv
+./build/tests/generate_serialization_tsv --flat ts-rpc/tests/serialization_flat_reference.tsv
+./build/tests/generate_serialization_complex_tsv ts-rpc/tests/serialization_complex_reference.tsv
+```
+
+Fixture Person: wspólny Rng w [`cpp-rpc/src/test/person_fixture.hpp`](../cpp-rpc/src/test/person_fixture.hpp) + port [`tests/personFixture.ts`](tests/personFixture.ts).
+
+---
+
 ## Architektura
 
 ```
@@ -71,4 +94,4 @@ Flat message/RPC: Fazy 2–3 w [flat-todo.md](flat-todo.md).
 cd ts-rpc && npm test
 ```
 
-Pokrycie m.in.: golden compressed vs C++, circular buffer, message channel, RPC, kontrakt `IWriter`/`IReader` (`writerReaderContract.test.ts`), flat LE / SoA / pointer (`flatSerialization.test.ts`).
+Pokrycie m.in.: golden compressed vs C++, flat skalarne, Person value/graph cross-lang (`serializationComplex.test.ts`), circular buffer, message channel, RPC, kontrakt `IWriter`/`IReader`, flat LE smoke (`flatSerialization.test.ts`).

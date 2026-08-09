@@ -17,6 +17,10 @@ export class FlatWriter extends FlatWriterBase {
     return this.arraySink.currentPos()
   }
 
+  pokeU32(absOffset: number, value: number): void {
+    this.arraySink.pokeU32(absOffset, value)
+  }
+
   toUint8Array(): Uint8Array {
     return this.arraySink.toUint8Array().slice()
   }

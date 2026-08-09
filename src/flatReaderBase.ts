@@ -259,6 +259,12 @@ export class FlatReaderBase implements IReader {
       })
     }
   }
+
+  /** Pre-register a pointer as already read (flat shared-root framing). */
+  markReadPointer(value: unknown): void {
+    if (value === null || value === undefined) return
+    this.readPointers.push(value)
+  }
 }
 
 export class Uint8ArrayFlatSource implements FlatPeekSource {

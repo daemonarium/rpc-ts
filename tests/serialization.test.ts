@@ -9,6 +9,8 @@ import {
   LocalCircularBufferWriter,
   Reader,
   Writer,
+  FlatWriter,
+  FlatReader,
   CodecRegistry,
 } from '../src/index.js'
 
@@ -207,6 +209,73 @@ describe('Reader and Writer (serialization reference)', () => {
       const buf = writer.toArrayBuffer()
       const actualHex = bytesToHex(new Uint8Array(buf))
       expect(actualHex, `type=${type} valueStr=${valueStr}`).to.equal(hex.toLowerCase())
+    }
+  })
+})
+
+describe('FlatWriter/FlatReader (flat scalar reference)', () => {
+  let rows: Array<{ type: RowType; valueStr: string; hex: string }>
+
+  before(async () => {
+    const path = join(__dirname, 'serialization_flat_reference.tsv')
+    const content = await readFile(path, 'utf-8')
+    rows = content
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [type, valueStr, hex] = line.split('\t')
+        return { type: type as RowType, valueStr: valueStr!, hex: hex! }
+      })
+  })
+
+  function writeFlat(writer: FlatWriter, type: RowType, value: number | bigint): void {
+    switch (type) {
+      case 'u64': writer.writeU64(value as bigint); break
+      case 'i64': writer.writeI64(value as bigint); break
+      case 'f64': writer.writeF64(value as number); break
+      case 'u32': writer.writeU32(value as number); break
+      case 'i32': writer.writeI32(value as number); break
+      case 'u16': writer.writeU16(value as number); break
+      case 'i16': writer.writeI16(value as number); break
+      case 'f32': writer.writeF32(value as number); break
+      case 'u8': writer.writeU8(value as number); break
+      case 'i8': writer.writeI8(value as number); break
+    }
+  }
+
+  function readFlat(reader: FlatReader, type: RowType): number | bigint {
+    switch (type) {
+      case 'u64': return reader.readU64()
+      case 'i64': return reader.readI64()
+      case 'f64': return reader.readF64()
+      case 'u32': return reader.readU32()
+      case 'i32': return reader.readI32()
+      case 'u16': return reader.readU16()
+      case 'i16': return reader.readI16()
+      case 'f32': return reader.readF32()
+      case 'u8': return reader.readU8()
+      case 'i8': return reader.readI8()
+    }
+  }
+
+  it('FlatReader deserializes each flat reference row', () => {
+    const codecs = new CodecRegistry()
+    for (const { type, valueStr, hex } of rows) {
+      const reader = new FlatReader(hexToBytes(hex), codecs)
+      const actual = readFlat(reader, type)
+      const expected = parseExpectedValue(type, valueStr)
+      expect(valuesEqual(type, expected, actual), `type=${type} valueStr=${valueStr}`).to.be.true
+    }
+  })
+
+  it('FlatWriter serializes each value to the flat reference hex', () => {
+    const codecs = new CodecRegistry()
+    for (const { type, valueStr, hex } of rows) {
+      const expected = parseExpectedValue(type, valueStr)
+      const writer = new FlatWriter(codecs, 64)
+      writeFlat(writer, type, expected)
+      expect(bytesToHex(writer.toUint8Array()), `type=${type} valueStr=${valueStr}`).to.equal(hex.toLowerCase())
     }
   })
 })

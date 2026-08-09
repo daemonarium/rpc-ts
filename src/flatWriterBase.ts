@@ -206,6 +206,12 @@ export class FlatWriterBase implements IWriter {
     }
   }
 
+  /** Pre-register a pointer as already written (flat shared-root framing). */
+  markWrittenPointer(value: unknown): void {
+    if (value === null || value === undefined) return
+    this.writtenPointers.push(value)
+  }
+
   writeMap(
     entries: ReadonlyArray<[unknown, unknown]>,
     writeKey: (w: IWriter, key: unknown) => void,

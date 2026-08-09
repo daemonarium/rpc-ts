@@ -123,7 +123,8 @@ Cel: roundtrip wartości flat TS↔TS i zgodność bajtowa z C++ (bez socketa).
 - [x] Mapa SoA (empty, string→int); kolejność = memcmp keys
 - [x] Graf pointer (null, cycle a↔b) + `writeRest`/`readRest`
 - [x] Typed index u32 LE
-- [x] Cross medium: ArrayBuffer ↔ circular parity (bez harness C++ dump — golden LE wystarczy)
+- [x] Cross medium: ArrayBuffer ↔ circular parity
+- [x] Cross-dump C++↔TS: skalarne flat TSV + Person value/graph compressed+flat (`serialization_complex_reference.tsv`, `person_fixture.hpp`)
 
 ### 1.6 Circular flat (lokalny)
 
