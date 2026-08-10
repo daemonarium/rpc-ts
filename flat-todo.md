@@ -20,20 +20,20 @@ Compressed pozostaje dostępny jako opt-in (`{ format: 'compressed' }`). Flat je
 
 ---
 
-## Stan wyjściowy (compressed)
+## Compressed path (zachowany)
 
-Obecny kod (do zachowania jako compressed path):
+Historyczna ścieżka compressed (nadal w repo jako opt-in `{ format: 'compressed' }`):
 
 | Plik | Rola |
 |------|------|
 | `src/writer.ts` / `src/reader.ts` | ArrayBuffer writer/reader (varint) |
 | `src/LocalCircularBufferWriter.ts` / `…Reader.ts` | circular poke/peek (varint) |
 | `src/ModuleCircularBufferWriter.ts` / `…Reader.ts` | WASM module buffers (varint) |
-| `src/valueSerialization.ts` | schema-driven serialize/deserialize; już woła `beginFrame`/`endFrame`/`saveOffset` (dziś no-op) |
-| `src/SocketMessageChannel.ts` | `[len][type u64 varint][body][writeRest][payload]` |
-| `src/SocketRpcServer.ts` / `SocketRpcClient.ts` | RPC na `SocketMessageChannel` |
+| `src/valueSerialization.ts` | schema-driven serialize/deserialize; `beginFrame`/`endFrame`/`saveOffset` (no-op na compressed) |
+| `src/SocketMessageChannel.ts` | compressed framing: `[len][type u64 varint][body][writeRest][payload]` |
+| `src/SocketRpcServer.ts` / `SocketRpcClient.ts` | domyślnie flat; compressed przez `SocketMessageChannel` |
 
-Uwaga: mapy w `valueSerialization` idą przez `writeMap`/`readMap` (compressed = interleaved). Flat wymaga SoA w implementacji flat writer/reader.
+Mapy: compressed = interleaved; flat = SoA (`flat-format.md`). Cutover procesów / default flat: [TESTING.md](../TESTING.md).
 
 ---
 
@@ -51,7 +51,7 @@ Uwaga: mapy w `valueSerialization` idą przez `writeMap`/`readMap` (compressed =
 - [x] Testy kontraktu: `tests/writerReaderContract.test.ts` (Faza 0)
 - [x] Testy flat: `flatSerialization.test.ts` (1), `flatMessageChannel.test.ts` (2), `flatSocketRpc.test.ts` (3)
 - [x] `README.md` — architektura + kontrakt + status flat (serializacja / channel / RPC)
-- [ ] Ten plik — odhaczać w trakcie
+- [x] Ten plik — checklist cutoveru zamknięta (opcjonalne Module circular flat nadal otwarte)
 
 ---
 

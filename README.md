@@ -28,7 +28,7 @@ Blob `TypeRegistry` / `rpc_description`: `[envelope u8][compressed body]` — `T
 
 ## Goldeny vs cpp-rpc
 
-Checked-in TSV (źródło prawdy = C++ generators w `build/tests/`):
+Checked-in TSV (źródło prawdy = C++ generators w `cmake-build-debug/tests/` lub lokalnym `build/tests/`):
 
 | Plik | Zawartość |
 |------|-----------|
@@ -36,13 +36,13 @@ Checked-in TSV (źródło prawdy = C++ generators w `build/tests/`):
 | [`tests/serialization_flat_reference.tsv`](tests/serialization_flat_reference.tsv) | skalarne flat LE |
 | [`tests/serialization_complex_reference.tsv`](tests/serialization_complex_reference.tsv) | Person value/graph compressed+flat |
 
-Regeneracja (wymaga reflection clang build, katalog `build/`):
+Regeneracja (wymaga reflection clang build; preferuj `cmake-build-debug`, albo `build/` jeśli tak masz skonfigurowane):
 
 ```bash
-cmake --build build --target generate_serialization_tsv generate_serialization_complex_tsv
-./build/tests/generate_serialization_tsv ts-rpc/tests/serialization_reference.tsv
-./build/tests/generate_serialization_tsv --flat ts-rpc/tests/serialization_flat_reference.tsv
-./build/tests/generate_serialization_complex_tsv ts-rpc/tests/serialization_complex_reference.tsv
+cmake --build cmake-build-debug --target generate_serialization_tsv generate_serialization_complex_tsv
+./cmake-build-debug/tests/generate_serialization_tsv ts-rpc/tests/serialization_reference.tsv
+./cmake-build-debug/tests/generate_serialization_tsv --flat ts-rpc/tests/serialization_flat_reference.tsv
+./cmake-build-debug/tests/generate_serialization_complex_tsv ts-rpc/tests/serialization_complex_reference.tsv
 ```
 
 Fixture Person: wspólny Rng w [`cpp-rpc/src/test/person_fixture.hpp`](../cpp-rpc/src/test/person_fixture.hpp) + port [`tests/personFixture.ts`](tests/personFixture.ts).
@@ -88,6 +88,8 @@ Obowiązkowe metody (używane przez `valueSerialization` i codecs):
 - [`SocketMessageChannel`](src/SocketMessageChannel.ts) — compressed: `[len 4B LE][type u64 varint][body][writeRest][payload]`
 - [`FlatSocketMessageChannel`](src/FlatSocketMessageChannel.ts) — flat: `[len][type u32 LE][encoded_size_0][root][writeRest…][sentinel 0][payload]` (wspólne framing: [`socketMessageFraming.ts`](src/socketMessageFraming.ts))
 - [`SocketRpcServer`](src/SocketRpcServer.ts) / [`SocketRpcClient`](src/SocketRpcClient.ts) — domyślnie flat; compressed opt-in: `new SocketRpcServer(socket, registry, codecs, { format: 'compressed' })`
+- Nazwa [`SocketMessageChannel`](src/SocketMessageChannel.ts) = ścieżka **compressed**; flat = `FlatSocketMessageChannel`
+- C++ opt-in compressed USER: `WAOS_MODULE_RPC_COMPRESSED` ([`module.hpp`](../cpp-rpc/src/utils/module.hpp))
 
 ---
 
@@ -95,6 +97,9 @@ Obowiązkowe metody (używane przez `valueSerialization` i codecs):
 
 ```bash
 cd ts-rpc && npm test
+# z roota monorepo:
+npm test -w @wa-os/ts-rpc
+npm run gate   # pełny gate — [TESTING.md](../TESTING.md)
 ```
 
 Pokrycie m.in.: golden compressed vs C++, flat skalarne, Person value/graph cross-lang (`serializationComplex.test.ts`), circular buffer, message channel (compressed + flat), RPC compressed + flat (`flatSocketRpc.test.ts`), kontrakt `IWriter`/`IReader`, flat LE smoke (`flatSerialization.test.ts`).
