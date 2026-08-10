@@ -5,21 +5,22 @@ Biblioteka TypeScript łącząca:
 1. **serializację / deserializację** wartości według `TypeRegistry` (codecs + `valueSerialization`),
 2. **RPC** i kanał wiadomości na sockecie (TS ↔ WASM / C++ `cpp-rpc`).
 
-Warstwa typów (`serializeValueByType` / `deserializeValueByType`) nie zna formatu ani medium — woła wspólny kontrakt **`IWriter` / `IReader`**. Konkretny backend (compressed / flat) implementuje ten kontrakt.
+Warstwa typów (`serializeValueByType` / `deserializeValueByType`) nie zna formatu ani medium — woła wspólny kontrakt **`IWriter` / `IReader`**. Konkretny backend (compressed / flat / key) implementuje ten kontrakt.
 
 ---
 
 ## Formaty binarne
 
-| | Compressed | Flat |
-|--|------------|------|
-| Status | zaimplementowany (domyślny) | serializacja + message channel + RPC — [flat-todo.md](flat-todo.md) |
-| Liczby | varint / sortowalny float | fixed LE (jak C++) |
-| Mapy | interleaved (`length` + pary) | SoA |
-| Ramki | `beginFrame` / `endFrame` / `saveOffset` = no-op | trailery checkpointów |
-| Odczyt | zawsze materialized | zawsze materialized (brak `flat_view` w TS) |
+| | Compressed | Flat | Key |
+|--|------------|------|-----|
+| Status | zaimplementowany (domyślny) | serializacja + message channel + RPC — [flat-todo.md](flat-todo.md) | serializacja (+ circular), bez RPC — [key-todo.md](key-todo.md) |
+| Liczby | varint / sortowalny float | fixed LE (jak C++) | jak compressed, w regionie **data** |
+| Mapy | interleaved (`length` + pary) | SoA | throw |
+| Ramki | `beginFrame` / `endFrame` / `saveOffset` = no-op | trailery checkpointów | no-op |
+| Layout | strumień | strumień + trailery | `[data][meta][u8 meta_size]` |
+| Odczyt | zawsze materialized | zawsze materialized (brak `flat_view` w TS) | materialized |
 
-Specyfikacja wire flat: [../cpp-rpc/flat-format.md](../cpp-rpc/flat-format.md). Compressed i flat **nie są** kompatybilne bajtowo — nie mieszać na jednym sockecie.
+Specyfikacja wire flat: [../cpp-rpc/flat-format.md](../cpp-rpc/flat-format.md). Spec key: [../cpp-rpc/key-format.md](../cpp-rpc/key-format.md). Compressed / flat / key **nie są** kompatybilne bajtowo — nie mieszać na jednym sockecie.
 
 Blob `TypeRegistry` / `rpc_description`: `[envelope u8][compressed body]` — `TypeRegistry.dataFormat` / `SerializationFormat` (`Compressed` | `Flat` | `Key`). Body registry zawsze compressed. Spec: [../cpp-rpc/type-registry-blob.md](../cpp-rpc/type-registry-blob.md).
 
@@ -58,10 +59,10 @@ Fixture Person: wspólny Rng w [`cpp-rpc/src/test/person_fixture.hpp`](../cpp-rp
 ┌────────────────────────────▼────────────────────────────┐
 │  IWriter / IReader  (writerTypes.ts)                    │
 └────────────────────────────┬────────────────────────────┘
-         ┌───────────────────┼───────────────────┐
-         ▼                   ▼                   ▼
-   Writer / Reader   LocalCircularBuffer*   FlatWriter / FlatReader /
-   (ArrayBuffer)     (socket buffers)       FlatLocalCircularBuffer*
+         ┌───────────────────┼───────────────────┬──────────────────┐
+         ▼                   ▼                   ▼                  ▼
+   Writer / Reader   LocalCircularBuffer*   FlatWriter / …    KeyWriter / KeyReader /
+   (ArrayBuffer)     (socket buffers)       FlatLocalCircular* KeyLocalCircular*
 ```
 
 ### Kontrakt `IWriter` / `IReader`
@@ -76,6 +77,7 @@ Obowiązkowe metody (używane przez `valueSerialization` i codecs):
 - **`writeMap` / `readMap`** — layout zależy od backendu:
   - compressed: `writeLength(n)` + interleaved key/value callbacks (jak C++ `stream_writer::write_map`)
   - flat: SoA wg `flat-format.md` (`FlatWriter` / `FlatReader` / circular)
+  - key: throw (map/pointer/typed nieobsługiwane)
 
 `ModuleCircularBufferWriter` / `Reader` to niskopoziomowe poke/peek (nie pełny kontrakt) — używane do surowego I/O, nie przez `valueSerialization`.
 

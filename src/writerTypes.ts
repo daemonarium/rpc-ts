@@ -9,9 +9,10 @@ export interface TypedWriteValue {
 
 /**
  * Common writer contract used by valueSerialization and codecs.
- * Compressed backends use varint scalars and no-op frames; flat (Phase 1)
- * will use fixed LE scalars and real trailers. writeMap layout differs
- * per format (compressed = interleaved; flat = SoA).
+ * Compressed: varint scalars, no-op frames, interleaved maps.
+ * Flat: fixed LE scalars, real trailers, SoA maps.
+ * Key: compressed scalars split into data/meta ([data][meta][meta_size]);
+ * map/pointer/typed throw.
  */
 export interface IWriter {
   beginFrame(): void
