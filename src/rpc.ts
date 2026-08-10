@@ -16,7 +16,7 @@ export const RPC_ERROR_TYPE = 'rpc_error'
 export type RpcWireFormat = 'compressed' | 'flat'
 
 export interface SocketRpcOptions {
-  /** Default: compressed (cpp-rpc socket_message_channel). */
+  /** Default: flat (FlatSocketMessageChannel / flat_materialized_codec). */
   format?: RpcWireFormat
 }
 

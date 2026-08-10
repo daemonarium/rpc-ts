@@ -13,7 +13,7 @@ Warstwa typów (`serializeValueByType` / `deserializeValueByType`) nie zna forma
 
 | | Compressed | Flat | Key |
 |--|------------|------|-----|
-| Status | zaimplementowany (domyślny) | serializacja + message channel + RPC — [flat-todo.md](flat-todo.md) | serializacja (+ circular), bez RPC — [key-todo.md](key-todo.md) |
+| Status | legacy opt-in | **domyślny** (serializacja + message channel + RPC) — [flat-todo.md](flat-todo.md) | serializacja (+ circular), bez RPC — [key-todo.md](key-todo.md) |
 | Liczby | varint / sortowalny float | fixed LE (jak C++) | jak compressed, w regionie **data** |
 | Mapy | interleaved (`length` + pary) | SoA | throw |
 | Ramki | `beginFrame` / `endFrame` / `saveOffset` = no-op | trailery checkpointów | no-op |
@@ -87,7 +87,7 @@ Obowiązkowe metody (używane przez `valueSerialization` i codecs):
 
 - [`SocketMessageChannel`](src/SocketMessageChannel.ts) — compressed: `[len 4B LE][type u64 varint][body][writeRest][payload]`
 - [`FlatSocketMessageChannel`](src/FlatSocketMessageChannel.ts) — flat: `[len][type u32 LE][encoded_size_0][root][writeRest…][sentinel 0][payload]` (wspólne framing: [`socketMessageFraming.ts`](src/socketMessageFraming.ts))
-- [`SocketRpcServer`](src/SocketRpcServer.ts) / [`SocketRpcClient`](src/SocketRpcClient.ts) — domyślnie compressed; flat opt-in: `new SocketRpcServer(socket, registry, codecs, { format: 'flat' })` (to samo dla client)
+- [`SocketRpcServer`](src/SocketRpcServer.ts) / [`SocketRpcClient`](src/SocketRpcClient.ts) — domyślnie flat; compressed opt-in: `new SocketRpcServer(socket, registry, codecs, { format: 'compressed' })`
 
 ---
 

@@ -176,7 +176,7 @@ describe('SocketRpcServer protocol compatibility', () => {
     ensureRpcCodecs(codecs, registry)
 
     const { s0, s1, transfer } = createLoopbackPair()
-    const server = new SocketRpcServer(s1, registry, codecs)
+    const server = new SocketRpcServer(s1, registry, codecs, { format: 'compressed' })
     const clientChannel = new SocketMessageChannel(s0, codecs)
     clientChannel.registerMessageType(RPC_REQUEST_TYPE)
     clientChannel.registerMessageType(RPC_RESPONSE_TYPE)
@@ -219,7 +219,7 @@ describe('SocketRpcServer protocol compatibility', () => {
     ensureRpcCodecs(codecs, registry)
 
     const { s0, s1, transfer } = createLoopbackPair()
-    const server = new SocketRpcServer(s1, registry, codecs)
+    const server = new SocketRpcServer(s1, registry, codecs, { format: 'compressed' })
     const clientChannel = new SocketMessageChannel(s0, codecs)
     clientChannel.registerMessageType(RPC_REQUEST_TYPE)
     clientChannel.registerMessageType(RPC_RESPONSE_TYPE)
@@ -251,7 +251,7 @@ describe('SocketRpcServer protocol compatibility', () => {
     ensureRpcCodecs(codecs, registry)
 
     const { s0, s1, transfer } = createLoopbackPair()
-    const server = new SocketRpcServer(s1, registry, codecs)
+    const server = new SocketRpcServer(s1, registry, codecs, { format: 'compressed' })
     const clientChannel = new SocketMessageChannel(s0, codecs)
     clientChannel.registerMessageType(RPC_REQUEST_TYPE)
     clientChannel.registerMessageType(RPC_RESPONSE_TYPE)
@@ -297,7 +297,7 @@ describe('SocketRpcServer protocol compatibility', () => {
     ensureRpcCodecs(codecs, registry)
 
     const { s0, s1, transfer } = createLoopbackPair()
-    const server = new SocketRpcServer(s1, registry, codecs)
+    const server = new SocketRpcServer(s1, registry, codecs, { format: 'compressed' })
     const clientChannel = new SocketMessageChannel(s0, codecs)
     clientChannel.registerMessageType(RPC_REQUEST_TYPE)
     clientChannel.registerMessageType(RPC_RESPONSE_TYPE)

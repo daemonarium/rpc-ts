@@ -164,7 +164,7 @@ export class TypeRegistry {
   private readonly typesByName = new Map<string, TypeDescription>()
   private methods: RegisteredMethod[] = []
   /** Encoding of data described by this registry (not the registry blob itself). */
-  dataFormat: SerializationFormat = SerializationFormat.Compressed
+  dataFormat: SerializationFormat = SerializationFormat.Flat
 
   constructor(types: TypeDescription[] = undefined) {
     if(types) {

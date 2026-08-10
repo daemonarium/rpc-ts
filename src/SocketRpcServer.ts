@@ -94,10 +94,10 @@ function createRpcMessageChannel(
   codecs: CodecRegistry,
   options?: SocketRpcOptions
 ): SocketMessageChannelBase {
-  if (options?.format === 'flat') {
-    return new FlatSocketMessageChannel(socket, codecs)
+  if (options?.format === 'compressed') {
+    return new SocketMessageChannel(socket, codecs)
   }
-  return new SocketMessageChannel(socket, codecs)
+  return new FlatSocketMessageChannel(socket, codecs)
 }
 
 export class SocketRpcServer {
@@ -114,10 +114,10 @@ export class SocketRpcServer {
     this.typeRegistry = typeRegistry
     ensureRpcTypesInRegistry(typeRegistry)
     ensureRpcCodecs(codecs, typeRegistry)
-    if (options?.format === 'flat') {
-      typeRegistry.dataFormat = SerializationFormat.Flat
-    } else {
+    if (options?.format === 'compressed') {
       typeRegistry.dataFormat = SerializationFormat.Compressed
+    } else {
+      typeRegistry.dataFormat = SerializationFormat.Flat
     }
     this.messageChannel = createRpcMessageChannel(socket, codecs, options)
     this.messageChannel.registerMessageType(RPC_REQUEST_TYPE)

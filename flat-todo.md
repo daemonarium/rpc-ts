@@ -4,7 +4,7 @@ Wire layout i semantyka: [cpp-rpc/flat-format.md](../cpp-rpc/flat-format.md) (je
 
 Cel: pełna zgodność bajtowa z C++ flat (serializacja → message channel → RPC), **zawsze materialized**. Brak `flat_view` / zero-copy w TS — w JS/TS nie ma sensu (brak taniego borrow z bufora WASM/heap bez materializacji obiektów).
 
-Compressed pozostaje domyślny i bez zmian zachowania. Flat jest osobnym formatem (niekompatybilny bajtowo).
+Compressed pozostaje dostępny jako opt-in (`{ format: 'compressed' }`). Flat jest **domyślnym** formatem SocketRpc / TypeRegistry.dataFormat.
 
 ---
 
@@ -178,10 +178,10 @@ Cel: `SocketRpcServer` / `SocketRpcClient` na flat message channel. Control mess
 
 ### 3.1 Wiring
 
-- [x] `SocketRpcServer` / `SocketRpcClient`: opcjonalne `{ format?: 'compressed' | 'flat' }` (default compressed)
+- [x] `SocketRpcServer` / `SocketRpcClient`: opcjonalne `{ format?: 'compressed' | 'flat' }`
 - [x] `ensureRpcCodecs` / rejestracja `rpc_request` / `rpc_response` / `rpc_error` bez zmian semantyki
 - [x] Exception types — `writeException` / `readException` (flat: u32 LE index) + `valueSerialization`
-- [x] Domyślnie compressed; flat opt-in
+- [x] Domyślnie flat; compressed opt-in `{ format: 'compressed' }`
 
 ### 3.2 Testy RPC
 
@@ -199,7 +199,7 @@ Cel: `SocketRpcServer` / `SocketRpcClient` na flat message channel. Control mess
 - [ ] `flat_zero_copy_codec` odpowiednik (handler dostaje view zamiast obiektu)
 - [ ] Random-access `enterIndexedFrame` / seek po checkpointach w TS readerze
 - [ ] Ewolucja schematu / field id
-- [ ] Automatyczna migracja istniejących serwisów na flat (opt-in per socket)
+- [x] Automatyczna migracja istniejących serwisów na flat (default flat w ts-rpc; procesy C++ na `flat_socket_rpc_*`; compressed via `WAOS_MODULE_RPC_COMPRESSED` / `{ format: 'compressed' }`)
 
 ---
 
