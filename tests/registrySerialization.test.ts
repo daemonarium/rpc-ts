@@ -12,6 +12,9 @@ import {
   registerDynamicCodecs,
   serializeTypedJson,
   deserializeTypedJson,
+  SerializationFormat,
+  packSerializationFormatEnvelope,
+  tryUnpackSerializationFormatEnvelope,
 } from '../src/index.js'
 
 function memberLinks(registry: TypeRegistry, typeName: string): string[] {
@@ -220,5 +223,37 @@ describe('TypeRegistry serialize/deserialize', () => {
     expect(restored.nodes[0]!.label).to.equal('parent')
     expect(restored.nodes[0]!.ref).to.equal(restored.nodes[1])
     expect(restored.nodes[0]!.ref!.label).to.equal('child')
+  })
+})
+
+describe('TypeRegistry dataFormat envelope', () => {
+  it('roundtrips Compressed Flat and Key', () => {
+    for (const format of [
+      SerializationFormat.Compressed,
+      SerializationFormat.Flat,
+      SerializationFormat.Key,
+    ]) {
+      const registry = buildKvWasmOrder()
+      registry.dataFormat = format
+      const bytes = serializeTypeRegistry(registry)
+      expect(bytes[0]).to.equal(packSerializationFormatEnvelope(format))
+      const restored = deserializeTypeRegistry(bytes)
+      expect(restored.dataFormat).to.equal(format)
+      expect(memberLinks(restored, 'DbgKv')).to.deep.equal(memberLinks(registry, 'DbgKv'))
+    }
+  })
+
+  it('legacy blob without envelope deserializes as Compressed', () => {
+    const registry = buildKvWasmOrder()
+    const withEnvelope = serializeTypeRegistry(registry)
+    const legacy = withEnvelope.subarray(1)
+    expect(legacy[0] & 0x80).to.equal(0)
+    const restored = deserializeTypeRegistry(legacy)
+    expect(restored.dataFormat).to.equal(SerializationFormat.Compressed)
+  })
+
+  it('rejects reserved bits and unknown format nibble', () => {
+    expect(() => tryUnpackSerializationFormatEnvelope(0x90)).to.throw(/reserved/)
+    expect(() => tryUnpackSerializationFormatEnvelope(0x83)).to.throw(/unknown format/)
   })
 })

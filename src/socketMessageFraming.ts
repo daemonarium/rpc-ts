@@ -27,6 +27,16 @@ export interface FramingReader {
   getReadOffset(): number
 }
 
+/** Writer returned by beginSend for RPC payload (args / result / exception). */
+export type MessageChannelWriter = IWriter & FramingWriter & {
+  writeException(typeName: string, value: unknown): void
+}
+
+/** Reader used for RPC payload deserialize / readException. */
+export type MessageChannelReader = IReader & FramingReader & {
+  readException(): { typeName: string, value: unknown }
+}
+
 /**
  * Length-prefixed message framing: peek/wait, commitSend, handleData loop,
  * dispatch table, onMessage arity → payloadSize.
@@ -56,6 +66,10 @@ export abstract class SocketMessageChannelBase {
    * (after length prefix was skipped). Leaves cursor at payload start.
    */
   protected abstract readMessageBody(): { typeIndex: number, msg: unknown }
+
+  abstract beginSend(typeName: string, value: object): MessageChannelWriter
+  abstract getReader(): MessageChannelReader
+  abstract getWriter(): MessageChannelWriter
 
   registerMessageType(typeName: string): void {
     if (!this.codecs.messages.has(typeName)) {

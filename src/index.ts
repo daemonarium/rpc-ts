@@ -41,6 +41,12 @@ export {
   type RegisteredMethod,
 } from './typeDescription.js'
 export { deserializeTypeRegistry, serializeTypeRegistry, createTypeRegistrySerializationRegistry, createTypeRegistryCodecs } from './registrySerialization.js'
+export {
+  SerializationFormat,
+  packSerializationFormatEnvelope,
+  tryUnpackSerializationFormatEnvelope,
+  SERIALIZATION_FORMAT_ENVELOPE,
+} from './serializationFormat.js'
 export { serializeTypedJson, deserializeTypedJson, registerDynamicCodecs, deserializeValueByType, serializeValueByType, registerMessageCodecs, type JsonValue } from './valueSerialization.js'
 export { glueCodeGenerators } from './generators/glueCode.js'
 export type { GlueCodeGenerator } from './generators/glueCode.js'
@@ -55,6 +61,8 @@ export { FlatSocketMessageChannel } from './FlatSocketMessageChannel.js'
 export {
   SocketMessageChannelBase,
   SOCKET_MESSAGE_LENGTH_SIZE,
+  type MessageChannelWriter,
+  type MessageChannelReader,
 } from './socketMessageFraming.js'
 export {
   ensureRpcTypesInRegistry,
@@ -65,6 +73,8 @@ export {
   type RpcRequest,
   type RpcResponse,
   type RpcError,
+  type RpcWireFormat,
+  type SocketRpcOptions,
 } from './rpc.js'
 export { SocketRpcClient } from './SocketRpcClient.js'
 export { SocketRpcServer } from './SocketRpcServer.js'

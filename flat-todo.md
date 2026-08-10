@@ -47,10 +47,10 @@ Uwaga: mapy w `valueSerialization` idą przez `writeMap`/`readMap` (compressed =
 - [x] `src/flatLocalCircularBufferReader.ts` — flat peek reader na circular
 - [ ] (opcjonalnie) `src/flatModuleCircularBufferWriter.ts` / `…Reader.ts` — jeśli Module* potrzebują flat pod WASM
 - [x] `src/FlatSocketMessageChannel.ts` — framing + flat body policy (`socketMessageFraming.ts`)
-- [x] Eksporty `IWriter`/`IReader` + flat (Faza 0–1) + `FlatSocketMessageChannel` (Faza 2) w `src/index.ts`
+- [x] Eksporty `IWriter`/`IReader` + flat + `FlatSocketMessageChannel` + `RpcWireFormat` w `src/index.ts`
 - [x] Testy kontraktu: `tests/writerReaderContract.test.ts` (Faza 0)
-- [x] Testy flat serializacji: `tests/flatSerialization.test.ts` (Faza 1); message: `tests/flatMessageChannel.test.ts` (Faza 2); RPC: `tests/flatSocketRpc.test.ts` (Faza 3)
-- [x] `README.md` — architektura + kontrakt + status flat serializacji / message channel
+- [x] Testy flat: `flatSerialization.test.ts` (1), `flatMessageChannel.test.ts` (2), `flatSocketRpc.test.ts` (3)
+- [x] `README.md` — architektura + kontrakt + status flat (serializacja / channel / RPC)
 - [ ] Ten plik — odhaczać w trakcie
 
 ---
@@ -172,23 +172,23 @@ Zgodnie z C++ flat message:
 
 ---
 
-## Faza 3 — RPC flat
+## Faza 3 — RPC flat — **DONE**
 
 Cel: `SocketRpcServer` / `SocketRpcClient` na flat message channel. Control messages zawsze materialized (i tak jedyny model w TS).
 
 ### 3.1 Wiring
 
-- [ ] `SocketRpcServer` / `SocketRpcClient`: przyjąć format lub gotowy channel (`'compressed' | 'flat'`)
-- [ ] `ensureRpcCodecs` / rejestracja `rpc_request` / `rpc_response` / `rpc_error` bez zmian semantyki
-- [ ] Exception types — serialize/deserialize przez `valueSerialization` na flat writer/reader
-- [ ] Domyślnie compressed (istniejący kod); flat opt-in
+- [x] `SocketRpcServer` / `SocketRpcClient`: opcjonalne `{ format?: 'compressed' | 'flat' }` (default compressed)
+- [x] `ensureRpcCodecs` / rejestracja `rpc_request` / `rpc_response` / `rpc_error` bez zmian semantyki
+- [x] Exception types — `writeException` / `readException` (flat: u32 LE index) + `valueSerialization`
+- [x] Domyślnie compressed; flat opt-in
 
 ### 3.2 Testy RPC
 
-- [ ] call int / string / void / error / typed exception
-- [ ] sequential calls, large string
-- [ ] user `onMessage` obok RPC na tym samym flat channel
-- [ ] Cross-language: TS flat RPC ↔ C++ `socket_rpc_server<flat_materialized_codec>` / client (loopback lub fixture)
+- [x] call int / string / void / error / typed exception (`tests/flatSocketRpc.test.ts`)
+- [x] sequential calls, large string
+- [x] user `onMessage` obok RPC na tym samym flat channel
+- [ ] Cross-language: TS flat RPC ↔ C++ (poza zakresem tej fazy — brak żywego harnessu)
 
 ---
 
@@ -210,14 +210,15 @@ Cel: `SocketRpcServer` / `SocketRpcClient` na flat message channel. Control mess
 3. [x] Faza 1.4–1.5 — valueSerialization + testy serializacji
 4. [x] Faza 1.6 — circular flat local
 5. [x] Faza 2 — flat message channel + testy
-6. [ ] Faza 3 — flat RPC + testy (+ cross C++ jeśli infrastruktura gotowa)
-7. [x] Eksporty flat w `index.ts` (kontrakt IWriter już wyeksportowany w Fazie 0; channel Faza 2)
+6. [x] Faza 3 — flat RPC + testy TS↔TS (cross C++ live poza zakresem)
+7. [x] Eksporty flat w `index.ts` (kontrakt IWriter, channel, `RpcWireFormat`)
 
 ---
 
 ## Kryteria „done”
 
-- [ ] Wszystkie checkboxy Faz 0–3 odhaczone (poza opcjonalnymi Module* i cross-C++ jeśli brak harnessu)
-- [ ] Istniejące testy compressed zielone bez regresji
-- [ ] Nowe testy flat: serializacja + message + RPC zielone
-- [ ] Dokumentacja: ten plik aktualny; wire = `cpp-rpc/flat-format.md`
+- [x] Checkboxy Faz 0–3 odhaczone (poza opcjonalnymi Module* i cross-C++ live)
+- [x] Istniejące testy compressed zielone bez regresji
+- [x] Nowe testy flat: serializacja + message + RPC zielone
+- [x] Dokumentacja: ten plik aktualny; wire = `cpp-rpc/flat-format.md`
+- [x] Format danych w blobie type_registry (`SerializationFormat` / envelope) — [type-registry-blob.md](../cpp-rpc/type-registry-blob.md)

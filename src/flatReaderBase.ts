@@ -185,6 +185,19 @@ export class FlatReaderBase implements IReader {
     codec.deserialize(this, output)
   }
 
+  readException(): { typeName: string, value: unknown } {
+    const index = this.readU32()
+    const codec = this.codecs.exceptions.getByIndex(index)
+    if (!codec) {
+      throw new Error(`Exception type not registered for deserialization (index ${index})`)
+    }
+    let value: unknown
+    codec.deserialize(this, (v) => {
+      value = v
+    })
+    return { typeName: codec.name, value }
+  }
+
   readMap(
     readKey: (r: IReader, assign: (key: unknown) => void) => void,
     readVal: (r: IReader, assign: (val: unknown) => void) => void

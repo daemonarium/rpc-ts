@@ -3,10 +3,21 @@ import type { TypeDescription } from './typeDescription.js'
 import { TypeKind } from './typeDescription.js'
 import { CodecRegistry } from './codec.js'
 import { SocketMessageChannel, type SocketMessageChannelSocket } from './SocketMessageChannel.js'
-import { ensureRpcTypesInRegistry, ensureRpcCodecs, RPC_REQUEST_TYPE, RPC_RESPONSE_TYPE, RPC_ERROR_TYPE } from './rpc.js'
+import { FlatSocketMessageChannel } from './FlatSocketMessageChannel.js'
+import {
+  ensureRpcTypesInRegistry,
+  ensureRpcCodecs,
+  RPC_REQUEST_TYPE,
+  RPC_RESPONSE_TYPE,
+  RPC_ERROR_TYPE,
+  type SocketRpcOptions,
+} from './rpc.js'
 import { serializeValueByType, deserializeValueByType, type JsonValue } from './valueSerialization.js'
 import { RpcException } from './RpcException.js'
 import type { RpcClient } from './RpcClient.js'
+import type { SocketMessageChannelBase } from './socketMessageFraming.js'
+import type { LocalSocket } from './LocalSocket.js'
+import { SerializationFormat } from './serializationFormat.js'
 
 interface PendingResponse {
   resolve: (value: unknown) => void
@@ -18,18 +29,39 @@ function toRequestId(value: number | bigint): bigint {
   return typeof value === 'bigint' ? value : BigInt(value)
 }
 
+function createRpcMessageChannel(
+  socket: LocalSocket,
+  codecs: CodecRegistry,
+  options?: SocketRpcOptions
+): SocketMessageChannelBase {
+  if (options?.format === 'flat') {
+    return new FlatSocketMessageChannel(socket, codecs)
+  }
+  return new SocketMessageChannel(socket, codecs)
+}
+
 export class SocketRpcClient implements RpcClient {
-  private readonly messageChannel: SocketMessageChannel
+  private readonly messageChannel: SocketMessageChannelBase
   private readonly typeRegistry: TypeRegistry
   private readonly methodsById = new Map<number, RegisteredMethod>()
   private readonly responseHandlers = new Map<bigint, PendingResponse>()
   private lastRequestId = 0n
 
-  constructor(socket: SocketMessageChannelSocket, typeRegistry: TypeRegistry, codecs: CodecRegistry) {
+  constructor(
+    socket: SocketMessageChannelSocket,
+    typeRegistry: TypeRegistry,
+    codecs: CodecRegistry,
+    options?: SocketRpcOptions
+  ) {
     this.typeRegistry = typeRegistry
     ensureRpcTypesInRegistry(typeRegistry)
     ensureRpcCodecs(codecs, typeRegistry)
-    this.messageChannel = new SocketMessageChannel(socket, codecs)
+    if (options?.format === 'flat') {
+      typeRegistry.dataFormat = SerializationFormat.Flat
+    } else {
+      typeRegistry.dataFormat = SerializationFormat.Compressed
+    }
+    this.messageChannel = createRpcMessageChannel(socket, codecs, options)
     this.messageChannel.registerMessageType(RPC_REQUEST_TYPE)
     this.messageChannel.registerMessageType(RPC_RESPONSE_TYPE)
     this.messageChannel.registerMessageType(RPC_ERROR_TYPE)
@@ -175,7 +207,7 @@ export class SocketRpcClient implements RpcClient {
     this.messageChannel.sendMessage(typeName, value)
   }
 
-  channel(): SocketMessageChannel {
+  channel(): SocketMessageChannelBase {
     return this.messageChannel
   }
 }

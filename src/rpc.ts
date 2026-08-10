@@ -12,6 +12,14 @@ export const RPC_REQUEST_TYPE = 'rpc_request'
 export const RPC_RESPONSE_TYPE = 'rpc_response'
 export const RPC_ERROR_TYPE = 'rpc_error'
 
+/** Wire format for SocketRpcServer / SocketRpcClient message channel. */
+export type RpcWireFormat = 'compressed' | 'flat'
+
+export interface SocketRpcOptions {
+  /** Default: compressed (cpp-rpc socket_message_channel). */
+  format?: RpcWireFormat
+}
+
 export interface RpcRequest {
   request_id: bigint
   function_id: bigint

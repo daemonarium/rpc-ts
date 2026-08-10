@@ -1,4 +1,5 @@
 import { CodecRegistry, type TypedValue } from './codec.js'
+import { SerializationFormat } from './serializationFormat.js'
 
 export enum TypeKind {
   Void = 0,
@@ -162,6 +163,8 @@ export class TypeRegistry {
   private types: TypeDescription[] = []
   private readonly typesByName = new Map<string, TypeDescription>()
   private methods: RegisteredMethod[] = []
+  /** Encoding of data described by this registry (not the registry blob itself). */
+  dataFormat: SerializationFormat = SerializationFormat.Compressed
 
   constructor(types: TypeDescription[] = undefined) {
     if(types) {

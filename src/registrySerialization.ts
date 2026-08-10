@@ -3,25 +3,46 @@ import { Reader } from './reader.js'
 import { Writer } from './writer.js'
 import { TypeRegistry, TypeDescription, TypeKind, TypeDescriptionParameters } from './typeDescription.js'
 import type { TypedValue } from './codec.js'
-import { 
+import {
   registerDynamicCodecs, serializeValueByType, deserializeValueByType, JsonValue,
   deserializeTypedJson, serializeTypedJson
 } from './valueSerialization.js'
+import {
+  SerializationFormat,
+  packSerializationFormatEnvelope,
+  tryUnpackSerializationFormatEnvelope,
+} from './serializationFormat.js'
 
-export function deserializeTypeRegistry(serialized: Uint8Array): TypeRegistry {    
+/**
+ * Deserialize a type_registry blob: optional v1 envelope u8 + compressed body.
+ * Legacy blobs (no bit7) → dataFormat = Compressed.
+ */
+export function deserializeTypeRegistry(serialized: Uint8Array): TypeRegistry {
+  let offset = 0
+  let dataFormat = SerializationFormat.Compressed
+  if (serialized.length > 0) {
+    const unpacked = tryUnpackSerializationFormatEnvelope(serialized[0])
+    if (unpacked !== null) {
+      dataFormat = unpacked
+      offset = 1
+    }
+  }
+  const body = offset === 0 ? serialized : serialized.subarray(offset)
   const typeRegistrySerializationRegistry = createTypeRegistrySerializationRegistry()
-  const codecs = new CodecRegistry()  
+  const codecs = new CodecRegistry()
   registerDynamicCodecs(codecs, typeRegistrySerializationRegistry)
-  const reader = new Reader(serialized, codecs)
+  const reader = new Reader(body, codecs)
   const rawTypeRegistry = deserializeTypedJson(reader, typeRegistrySerializationRegistry, 'type_registry')
   const typeRegistry = new TypeRegistry(rawTypeRegistry._types as TypeDescription[])
+  typeRegistry.dataFormat = dataFormat
   return typeRegistry
 }
 
 /**
  * Serialize a TypeRegistry to the same binary format as WASM rpc_description /
- * deserializeTypeRegistry input. Builds TypedValue wrappers so pointer identity
- * across shared TypeDescription references is preserved.
+ * deserializeTypeRegistry input: [envelope u8][compressed body].
+ * Builds TypedValue wrappers so pointer identity across shared TypeDescription
+ * references is preserved.
  */
 export function serializeTypeRegistry(registry: TypeRegistry): Uint8Array {
   const types = registry.getTypes()
@@ -49,6 +70,7 @@ export function serializeTypeRegistry(registry: TypeRegistry): Uint8Array {
   const codecs = new CodecRegistry()
   registerDynamicCodecs(codecs, typeRegistrySerializationRegistry)
   const writer = new Writer(codecs)
+  writer.writeU8(packSerializationFormatEnvelope(registry.dataFormat))
   serializeTypedJson(writer, typeRegistrySerializationRegistry, {
     _type: 'type_registry',
     _types: types.map((type) => wrappers.get(type)!),
