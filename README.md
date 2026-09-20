@@ -90,6 +90,26 @@ Obowiązkowe metody (używane przez `valueSerialization` i codecs):
 - [`SocketRpcServer`](src/SocketRpcServer.ts) / [`SocketRpcClient`](src/SocketRpcClient.ts) — domyślnie flat; compressed opt-in: `new SocketRpcServer(socket, registry, codecs, { format: 'compressed' })`
 - Nazwa [`SocketMessageChannel`](src/SocketMessageChannel.ts) = ścieżka **compressed**; flat = `FlatSocketMessageChannel`
 - C++ opt-in compressed USER: `WAOS_MODULE_RPC_COMPRESSED` ([`module.hpp`](../cpp-rpc/src/utils/module.hpp))
+- [`MessageChannel`](src/MessageChannel.ts) — węższy interfejs (`registerMessageType` / `onMessage` / `sendMessage` / `tryQueueMessage` / `isWritable` / `onWritable`). `tryQueueMessage` zwraca `false` gdy kanał pełen (C++ `try_queue_message`, bez flusha). [`SocketMessageChannelBase`](src/socketMessageFraming.ts) implementuje go; [`SocketRpcClient`](src/SocketRpcClient.ts) to pass-through — jeden obiekt spełnia **Starter + Channel**.
+
+---
+
+## Observable
+
+Port [`../cpp-rpc/src/observable/`](../cpp-rpc/src/observable/) w [`src/observable/`](src/observable/). Kernel-independent: transport to dowolny `MessageChannel` (LocalSocket, później WS / SockJS). „Remote” = across a message channel, nie „across the network”.
+
+| Warstwa | Plik | C++ |
+|---------|------|-----|
+| LWW + lifecycle | [`observable.ts`](src/observable/observable.ts) | `observable.hpp` |
+| Consumer + ring + Promise backpressure | [`consumerOutput.ts`](src/observable/consumerOutput.ts), [`ringBuffer.ts`](src/observable/ringBuffer.ts) | `consumer_output.hpp`, `ring_buffer.hpp` |
+| Demux `stream_*` | [`streamMultiplexer.ts`](src/observable/streamMultiplexer.ts) | `stream_multiplexer.hpp` |
+| Wire → Observable | [`remoteObservable.ts`](src/observable/remoteObservable.ts) | `remote_observable.hpp` |
+| Observable → wire | [`streamPublisher.ts`](src/observable/streamPublisher.ts), [`streamRelayConsumer.ts`](src/observable/streamRelayConsumer.ts) | `stream_publisher.hpp`, `stream_relay_consumer.hpp` |
+| Cache po `(function_id, args)` | [`remoteRegistry.ts`](src/observable/remoteRegistry.ts) | `remote_registry.hpp` |
+
+Backpressure: `onChange` zwraca `ObservablePromise` (resolved = sync, pending = czekaj); na kanale `tryQueueMessage` + `onWritable`. `SocketRpcClient` = Starter (`call`) + Channel w jednym, jak C++ `StreamMultiplexer(client, client, pid, socket)`.
+
+Adapter kernelowy (opcjonalny): [`../ts-kernel/src/KernelStreamEndpoint.ts`](../ts-kernel/src/KernelStreamEndpoint.ts) — para `(pid, socket)` jako `MessageChannel`. Rdzeń w `ts-rpc` działa bez kernela (`MockChannel` w testach).
 
 ---
 
@@ -102,4 +122,4 @@ npm test -w @wa-os/ts-rpc
 npm run gate   # pełny gate — [TESTING.md](../TESTING.md)
 ```
 
-Pokrycie m.in.: golden compressed vs C++, flat skalarne, Person value/graph cross-lang (`serializationComplex.test.ts`), circular buffer, message channel (compressed + flat), RPC compressed + flat (`flatSocketRpc.test.ts`), kontrakt `IWriter`/`IReader`, flat LE smoke (`flatSerialization.test.ts`).
+Pokrycie m.in.: golden compressed vs C++, flat skalarne, Person value/graph cross-lang (`serializationComplex.test.ts`), circular buffer, message channel (compressed + flat), RPC compressed + flat (`flatSocketRpc.test.ts`), kontrakt `IWriter`/`IReader`, flat LE smoke (`flatSerialization.test.ts`), observable (port `observable_ut.cpp` / `remote_observable_ut.cpp`).

@@ -6,6 +6,7 @@
 import { LocalSocket } from './LocalSocket.js'
 import type { IWriter, IReader } from './writerTypes.js'
 import { CodecRegistry } from './codec.js'
+import type { MessageChannel } from './MessageChannel.js'
 
 export const SOCKET_MESSAGE_LENGTH_SIZE = 4
 
@@ -41,15 +42,23 @@ export type MessageChannelReader = IReader & FramingReader & {
  * Length-prefixed message framing: peek/wait, commitSend, handleData loop,
  * dispatch table, onMessage arity → payloadSize.
  */
-export abstract class SocketMessageChannelBase {
+export abstract class SocketMessageChannelBase implements MessageChannel {
   readonly socket: LocalSocket
   protected handlingData = false
   protected readonly codecs: CodecRegistry
   protected readonly dispatchTable: DispatchEntry[] = []
+  private minWritableBytes = 0
+  private readonly writableHandlers: Array<() => void> = []
+  private writableHookInstalled = false
 
   constructor(socket: LocalSocket, codecs: CodecRegistry) {
     this.socket = socket
     this.codecs = codecs
+  }
+
+  /** 0 = always queue (C++ default). Non-zero requires that many writable bytes. */
+  setMinWritableBytes(bytes: number): void {
+    this.minWritableBytes = bytes
   }
 
   protected abstract get framingWriter(): FramingWriter
@@ -99,6 +108,39 @@ export abstract class SocketMessageChannelBase {
   }
 
   /**
+   * Queue a complete message without flushing. Returns false when the
+   * output buffer is below minWritableBytes (C++ try_queue_message).
+   */
+  tryQueueMessage(typeName: string, value: object): boolean {
+    if (!this.isWritable()) return false
+    this.beginSendFrame(typeName, value)
+    this.commitSendNoFlush()
+    return true
+  }
+
+  isWritable(): boolean {
+    if (this.minWritableBytes === 0) return true
+    return this.socket.outputBuffer.writableBytes() >= this.minWritableBytes
+  }
+
+  onWritable(handler: () => void): void {
+    this.writableHandlers.push(handler)
+    this.installWritableHook()
+  }
+
+  private installWritableHook(): void {
+    if (this.writableHookInstalled) return
+    this.writableHookInstalled = true
+    const prev = this.socket.getOptions().drainEventCallback
+    this.socket.setOptions({
+      drainEventCallback: (size) => {
+        if (prev) prev(size)
+        for (const handler of this.writableHandlers) handler()
+      }
+    })
+  }
+
+  /**
    * Reserve length placeholder at offset 0, set writer offset to 4, write body.
    * Subclasses expose typed beginSend that returns their writer.
    */
@@ -112,12 +154,16 @@ export abstract class SocketMessageChannelBase {
     this.writeMessageBody(typeName, value)
   }
 
-  commitSend(): void {
+  commitSendNoFlush(): void {
     const payloadLen = this.framingWriter.offset - SOCKET_MESSAGE_LENGTH_SIZE
     const lengthBytes = new Uint8Array(SOCKET_MESSAGE_LENGTH_SIZE)
     new DataView(lengthBytes.buffer).setUint32(0, payloadLen, true)
     this.socket.outputBuffer.poke(0, lengthBytes, SOCKET_MESSAGE_LENGTH_SIZE)
     this.socket.outputBuffer.commitWrite(this.framingWriter.offset)
+  }
+
+  commitSend(): void {
+    this.commitSendNoFlush()
     this.socket.flush()
   }
 

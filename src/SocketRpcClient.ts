@@ -18,6 +18,7 @@ import type { RpcClient } from './RpcClient.js'
 import type { SocketMessageChannelBase } from './socketMessageFraming.js'
 import type { LocalSocket } from './LocalSocket.js'
 import { SerializationFormat } from './serializationFormat.js'
+import type { MessageChannel } from './MessageChannel.js'
 
 interface PendingResponse {
   resolve: (value: unknown) => void
@@ -40,7 +41,7 @@ function createRpcMessageChannel(
   return new FlatSocketMessageChannel(socket, codecs)
 }
 
-export class SocketRpcClient implements RpcClient {
+export class SocketRpcClient implements RpcClient, MessageChannel {
   private readonly messageChannel: SocketMessageChannelBase
   private readonly typeRegistry: TypeRegistry
   private readonly methodsById = new Map<number, RegisteredMethod>()
@@ -205,6 +206,18 @@ export class SocketRpcClient implements RpcClient {
 
   sendMessage(typeName: string, value: object): void {
     this.messageChannel.sendMessage(typeName, value)
+  }
+
+  tryQueueMessage(typeName: string, value: object): boolean {
+    return this.messageChannel.tryQueueMessage(typeName, value)
+  }
+
+  isWritable(): boolean {
+    return this.messageChannel.isWritable()
+  }
+
+  onWritable(handler: () => void): void {
+    this.messageChannel.onWritable(handler)
   }
 
   channel(): SocketMessageChannelBase {

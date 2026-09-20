@@ -84,3 +84,38 @@ export { SocketRpcClient } from './SocketRpcClient.js'
 export { SocketRpcServer } from './SocketRpcServer.js'
 export { RpcDebugger } from './rpcDebugger.js'
 export type { RpcMessage } from './rpcDebugger.js'
+export type { MessageChannel } from './MessageChannel.js'
+export {
+  ObservablePromise,
+  ObservableState,
+  DbIoError,
+  type BinaryEntry,
+  type Change,
+  type Consumer,
+  type DispatchCallbacks,
+} from './observable/types.js'
+export { RingBuffer } from './observable/ringBuffer.js'
+export { ObservableBase, ConsumerOutput } from './observable/consumerOutput.js'
+export { Observable } from './observable/observable.js'
+export type { StreamReceiver } from './observable/streamReceiver.js'
+export {
+  type StreamHandle,
+  type StreamOpened,
+  type StreamItem,
+  type StreamKey,
+  type StreamDone,
+  type StreamReset,
+  type StreamError,
+  type StreamCancel,
+  STREAM_MESSAGE_TYPES,
+} from './observable/streamProtocol.js'
+export { StreamMultiplexer, type StreamStarter } from './observable/streamMultiplexer.js'
+export { RemoteObservable } from './observable/remoteObservable.js'
+export { StreamRelayConsumer } from './observable/streamRelayConsumer.js'
+export { StreamPublisher } from './observable/streamPublisher.js'
+export {
+  RemoteRegistry,
+  serializeObservationArgs,
+  observationKeyId,
+  type ObservationKey,
+} from './observable/remoteRegistry.js'
