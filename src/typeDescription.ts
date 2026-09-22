@@ -252,3 +252,24 @@ export class TypeRegistry {
 
 }
 
+function annotationTypeName(annotation: TypedValue | undefined): string | undefined {
+  if (!annotation || typeof annotation !== 'object') return undefined
+  return annotation._type
+}
+
+export function isMemberObservable(member: TypeMember): boolean {
+  return (member.annotations ?? []).some((annotation) =>
+    annotationTypeName(annotation) === 'observable_annotation'
+  )
+}
+
+export function isMemberStreamable(member: TypeMember): boolean {
+  return (member.annotations ?? []).some((annotation) =>
+    annotationTypeName(annotation) === 'streamable_annotation'
+  )
+}
+
+export function isMemberObservableOrStreamable(member: TypeMember): boolean {
+  return isMemberObservable(member) || isMemberStreamable(member)
+}
+

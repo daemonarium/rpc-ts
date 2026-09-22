@@ -48,6 +48,8 @@ const BUILTIN_CPP_TYPE_MAP = new Map<string, string>([
   ['rpc_error', 'serialization::rpc_error'],
   ['unknown_exception', 'serialization::unknown_exception'],
   ['read_annotation', 'serialization::read_annotation'],
+  ['observable_annotation', 'serialization::observable_annotation'],
+  ['streamable_annotation', 'serialization::streamable_annotation'],
   ['member_annotation', 'serialization::member_annotation']
 ])
 

@@ -3,6 +3,7 @@ import { TypeRegistry, TypeKind, type TypeDescription, type TypeMember } from '.
 export interface GeneratorOptions {
   className?: string
   namespace?: string
+  importPath?: string
 }
 
 export function generateCppGlueCode(registry: TypeRegistry, options: GeneratorOptions = {}): string {

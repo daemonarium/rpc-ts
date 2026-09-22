@@ -107,9 +107,64 @@ Port [`../cpp-rpc/src/observable/`](../cpp-rpc/src/observable/) w [`src/observab
 | Observable → wire | [`streamPublisher.ts`](src/observable/streamPublisher.ts), [`streamRelayConsumer.ts`](src/observable/streamRelayConsumer.ts) | `stream_publisher.hpp`, `stream_relay_consumer.hpp` |
 | Cache po `(function_id, args)` | [`remoteRegistry.ts`](src/observable/remoteRegistry.ts) | `remote_registry.hpp` |
 
-Backpressure: `onChange` zwraca `ObservablePromise` (resolved = sync, pending = czekaj); na kanale `tryQueueMessage` + `onWritable`. `SocketRpcClient` = Starter (`call`) + Channel w jednym, jak C++ `StreamMultiplexer(client, client, pid, socket)`.
+Backpressure: `onChange` zwraca `ObservablePromise` (resolved = sync, pending = czekaj); na kanale `tryQueueMessage` + `onWritable`. `SocketRpcClient` może być Starter + Channel w jednym (`new StreamMultiplexer(rpcClient, returnPid, returnSocket)`). Gdy RPC i `stream_*` są na **osobnych** socketach (observable-db: driver ≠ scan), przekaż kanał strumienia: `new StreamMultiplexer(rpcClient, streamChannel, returnPid, returnSocket)`.
 
 Adapter kernelowy (opcjonalny): [`../ts-kernel/src/KernelStreamEndpoint.ts`](../ts-kernel/src/KernelStreamEndpoint.ts) — para `(pid, socket)` jako `MessageChannel`. Rdzeń w `ts-rpc` działa bez kernela (`MockChannel` w testach).
+
+Generator **TS Client** używa `RemoteRegistry.getOrCreate` w metodach `*_observable` / `*_stream` (patrz niżej) — ten sam cache `(function_id, args)` i delta resume.
+
+---
+
+## Codegen → TS Client
+
+`rpc-codegen` (`codeGenCli.ts`) czyta `.wasm` / `.wdef` i emituje klienta TypeScript. Język: `-l "TS Client"`.
+
+C++ annotacje member-level w [`../cpp-rpc/src/serialization/annotations.hpp`](../cpp-rpc/src/serialization/annotations.hpp):
+
+- `[[=serialization::observable()]]` — live strumień (tail-and-catch). Generator dodaje `<method>_observable`.
+- `[[=serialization::streamable()]]` — skończony strumień (`stream_done`). Generator dodaje `<method>_stream`.
+
+Oryginalna metoda RPC zostaje (pierwszy parametr `stream_handle` zostaje jawny). Extra metoda pomija `stream_handle` i zwraca `RemoteObservable`. Semantyka observable vs streamable jest po stronie serwera (`stream_done` albo nie); klient używa tego samego `RemoteObservable` + `RemoteRegistry`.
+
+Wygenerowany konstruktor:
+
+```ts
+constructor(
+  rpcClient: SocketRpcClient,
+  returnPid: bigint | number,
+  returnSocket: number,
+  streamChannel?: MessageChannel,
+  remoteRegistry?: RemoteRegistry
+)
+```
+
+`streamChannel` opcjonalny: mux wtedy startuje RPC na `rpcClient`, a `stream_*` czyta z osobnego kanału. Bez niego Starter = Channel (jeden socket).
+
+Przykład — `table_watch` w [`../observable-db/src/structures/observable_db.hpp`](../observable-db/src/structures/observable_db.hpp):
+
+```ts
+attachStreamMessages(scanClient)
+const client = new ObservableDbClient(driver, tsPid, 1, scanClient)
+await client.table_watch(streamHandle, tableId, lower, lowerMode, upper, upperMode)
+const watch = client.table_watch_observable(tableId, lower, lowerMode, upper, upperMode)
+watch.subscribe(consumer)
+```
+
+`rpc-codegen` na surowym `.wasm` **nie** woła `start()` / `register_all()`. Dla modułów, które rejestrują API dopiero w `start()` (observable-db), spawn w kernelu i `readRawRpcDescription`:
+
+```bash
+cmake --build cmake-build-emscripten --target observable-db
+npm run generate:client -w @wa-os/observable-db-tests
+```
+
+Ogólne CLI (moduły z pełnym registry już po `_initialize()`):
+
+```bash
+cd ts-rpc && npm run build
+node dist/src/codeGenCli.js path/to/module.wasm -l "TS Client" -s 0
+```
+
+Dostępne języki: `C++ Types`, `C++ Client`, `C++ Server`, `TS Type Registry`, `TS Server`, `TS Client`.
 
 ---
 
@@ -122,4 +177,4 @@ npm test -w @wa-os/ts-rpc
 npm run gate   # pełny gate — [TESTING.md](../TESTING.md)
 ```
 
-Pokrycie m.in.: golden compressed vs C++, flat skalarne, Person value/graph cross-lang (`serializationComplex.test.ts`), circular buffer, message channel (compressed + flat), RPC compressed + flat (`flatSocketRpc.test.ts`), kontrakt `IWriter`/`IReader`, flat LE smoke (`flatSerialization.test.ts`), observable (port `observable_ut.cpp` / `remote_observable_ut.cpp`).
+Pokrycie m.in.: golden compressed vs C++, flat skalarne, Person value/graph cross-lang (`serializationComplex.test.ts`), circular buffer, message channel (compressed + flat), RPC compressed + flat (`flatSocketRpc.test.ts`), kontrakt `IWriter`/`IReader`, flat LE smoke (`flatSerialization.test.ts`), observable (port `observable_ut.cpp` / `remote_observable_ut.cpp`), annotacje `observable`/`streamable` + generator TS Client.

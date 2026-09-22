@@ -41,6 +41,9 @@ export {
   TypeDescription,
   TypeRegistry,
   TypeKind,
+  isMemberObservable,
+  isMemberStreamable,
+  isMemberObservableOrStreamable,
   type TypeMember,
   type RegisteredMethod,
 } from './typeDescription.js'
@@ -55,6 +58,8 @@ export { serializeTypedJson, deserializeTypedJson, registerDynamicCodecs, deseri
 export { glueCodeGenerators } from './generators/glueCode.js'
 export type { GlueCodeGenerator } from './generators/glueCode.js'
 export type { GeneratorOptions } from './generators/cppClient.js'
+export { generateTsClient } from './generators/tsClient.js'
+export type { TsClientGeneratorOptions } from './generators/tsClient.js'
 export { RawRpcServer } from './RawRpcServer.js'
 export type { MethodDescription } from './RawRpcServer.js'
 export { RawRpcClient } from './RawRpcClient.js'

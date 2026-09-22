@@ -192,7 +192,19 @@ export function createTypeRegistrySerializationRegistry(): TypeRegistry {
     name: 'read_annotation', kind: TypeKind.DynamicObject, members: [],
     bases: [memberAnnotationType]
   })
+  const observableAnnotationType = TypeDescription.create({
+    name: 'observable_annotation', kind: TypeKind.DynamicObject, members: [],
+    bases: [memberAnnotationType]
+  })
+  const streamableAnnotationType = TypeDescription.create({
+    name: 'streamable_annotation', kind: TypeKind.DynamicObject, members: [],
+    bases: [memberAnnotationType]
+  })
+  // Typed-codec order must match C++ type_registry_blob:
+  // type_description, read_annotation, observable_annotation, streamable_annotation
   registry.registerType(readAnnotationType)
+  registry.registerType(observableAnnotationType)
+  registry.registerType(streamableAnnotationType)
   registry.registerType(memberAnnotationType)
   return registry
 
