@@ -102,6 +102,13 @@ export {
 export { RingBuffer } from './observable/ringBuffer.js'
 export { ObservableBase, ConsumerOutput } from './observable/consumerOutput.js'
 export { Observable } from './observable/observable.js'
+export {
+  DecodedObservable,
+  DecodedOutput,
+  decodeObservable,
+  type DecodedEntry,
+  type DecodedConsumer,
+} from './observable/decodedObservable.js'
 export type { StreamReceiver } from './observable/streamReceiver.js'
 export {
   type StreamHandle,
