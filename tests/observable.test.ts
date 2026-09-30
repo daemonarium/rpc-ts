@@ -8,6 +8,7 @@ import {
   type Change,
   type Consumer,
   ObservablePromise,
+  setConsumerFinalizerForTest,
 } from '../src/index.js'
 import { bytesEqual } from '../src/observable/types.js'
 
@@ -508,5 +509,28 @@ describe('observable (port of observable_ut.cpp)', () => {
     expectKey(c.changes[0].key, 'new')
     expect(src.getEntries().length).to.equal(1)
     expectKey(src.getEntries()[0].key, 'new')
+  })
+
+  it('FinalizationRegistry unsubscribes a collected consumer (last one stops the source)', () => {
+    const held: Array<{ target: object, out: { unsubscribe: () => void } }> = []
+    setConsumerFinalizerForTest({
+      register(target, out) {
+        held.push({ target, out })
+      },
+      unregister() {},
+    })
+    try {
+      const src = new ManualSource()
+      const c = new RecordingConsumer()
+      src.subscribe(c)
+      expect(src.starts).to.equal(1)
+      expect(src.stops).to.equal(0)
+      expect(held).to.have.length(1)
+      held[0].out.unsubscribe()
+      expect(src.stops).to.equal(1)
+      expect(src.state()).to.equal(ObservableState.idle)
+    } finally {
+      setConsumerFinalizerForTest(undefined)
+    }
   })
 })

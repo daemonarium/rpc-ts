@@ -25,6 +25,25 @@ export abstract class ObservableBase {
   protected onResume(): void {}
 }
 
+export interface ConsumerFinalizer {
+  register(target: object, held: ConsumerOutput, unregisterToken: object): void
+  unregister(unregisterToken: object): void
+}
+
+function defaultConsumerFinalizer(): ConsumerFinalizer | null {
+  if (typeof FinalizationRegistry === 'undefined') return null
+  return new FinalizationRegistry<ConsumerOutput>((out) => {
+    if (!out.detached()) out.unsubscribe()
+  })
+}
+
+let consumerFinalizer: ConsumerFinalizer | null = defaultConsumerFinalizer()
+
+/** Test hook: inject a fake registry, or restore the real one with null. */
+export function setConsumerFinalizerForTest(reg: ConsumerFinalizer | null | undefined): void {
+  consumerFinalizer = reg === undefined ? defaultConsumerFinalizer() : reg
+}
+
 export class ConsumerOutput {
   private owner: ObservableBase | null
   private readonly consumerRef: WeakRef<object> | null
@@ -56,6 +75,9 @@ export class ConsumerOutput {
     this.dispatch = dispatch
     this.buffer = new RingBuffer<Change>(bufferLimit)
     this.replayWatermark_ = toTs(replayWatermark)
+    if (consumerRef && consumerFinalizer) {
+      consumerFinalizer.register(consumerRef, this, this)
+    }
   }
 
   replayWatermark(): bigint {
@@ -165,6 +187,7 @@ export class ConsumerOutput {
   private detach(): void {
     if (this.detached_) return
     this.detached_ = true
+    consumerFinalizer?.unregister(this)
     if (this.paused_) {
       this.paused_ = false
       if (this.owner) this.owner.onConsumerResumed(this)

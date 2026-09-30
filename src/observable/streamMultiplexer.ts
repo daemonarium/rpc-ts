@@ -83,7 +83,21 @@ export class StreamMultiplexer<
       since_timestamp: sinceTs,
     }
     if (receiver) this.receivers.set(id, receiver)
-    this.starter.call(Number(functionId), handle, ...args)
+    try {
+      const started = this.starter.call(Number(functionId), handle, ...args)
+      void Promise.resolve(started).catch((err: unknown) => {
+        const r = this.receivers.get(id)
+        if (!r) return
+        const message = err instanceof Error ? err.message : String(err)
+        r.onStreamError({ stream_id: id, message })
+      })
+    } catch (err: unknown) {
+      const r = this.receivers.get(id)
+      if (r) {
+        const message = err instanceof Error ? err.message : String(err)
+        r.onStreamError({ stream_id: id, message })
+      }
+    }
     return id
   }
 

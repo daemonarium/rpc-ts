@@ -100,7 +100,7 @@ export {
   type DispatchCallbacks,
 } from './observable/types.js'
 export { RingBuffer } from './observable/ringBuffer.js'
-export { ObservableBase, ConsumerOutput } from './observable/consumerOutput.js'
+export { ObservableBase, ConsumerOutput, setConsumerFinalizerForTest } from './observable/consumerOutput.js'
 export { Observable } from './observable/observable.js'
 export {
   DecodedObservable,

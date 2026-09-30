@@ -58,6 +58,10 @@ export class DecodedObservable<K, V> {
   private readonly outputs: DecodedOutput<K, V>[] = []
   private maxTs_ = 0n
   private sourceOutput: ConsumerOutput | null = null
+  // Strong ref: ConsumerOutput keeps only a WeakRef to the consumer object.
+  // An ephemeral `{}` would be GC'd in the browser and the source would treat
+  // this lens as dead, silently dropping all further changes.
+  private readonly sourceConsumerRef = {}
 
   constructor(
     source: Observable<BinaryEntry>,
@@ -80,7 +84,7 @@ export class DecodedObservable<K, V> {
     }
     if (this.sourceOutput === null) {
       // First own consumer: subscribe the source (triggers its onStart).
-      this.sourceOutput = this.source.subscribe({}, {
+      this.sourceOutput = this.source.subscribe(this.sourceConsumerRef, {
         onChange: (c) => this.handleChange(c),
         onReady: () => this.dispatchReady(),
         onReset: () => this.handleReset(),

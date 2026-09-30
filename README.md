@@ -122,9 +122,9 @@ Generator **TS Client** używa `RemoteRegistry.getOrCreate` w metodach `*_observ
 C++ annotacje member-level w [`../cpp-rpc/src/serialization/annotations.hpp`](../cpp-rpc/src/serialization/annotations.hpp):
 
 - `[[=serialization::observable()]]` — live strumień (tail-and-catch). Generator dodaje `<method>_observable`.
-- `[[=serialization::streamable()]]` — skończony strumień (`stream_done`). Generator dodaje `<method>_stream`.
+- `[[=serialization::streamable()]]` — skończony strumień. Generator dodaje `<method>_stream`.
 
-Oryginalna metoda RPC zostaje (pierwszy parametr `stream_handle` zostaje jawny). Extra metoda pomija `stream_handle` i zwraca `RemoteObservable`. Semantyka observable vs streamable jest po stronie serwera (`stream_done` albo nie); klient używa tego samego `RemoteObservable` + `RemoteRegistry`.
+Oryginalna metoda RPC zostaje (pierwszy parametr `stream_handle` zostaje jawny). Extra metoda pomija `stream_handle` i zwraca `RemoteObservable`. **Oba** dostają `stream_done`. Różnica: po `stream_done` observable zostaje w `ready` i przyjmuje dalsze `stream_item` (live); streamable na tym kończy. `stream_done` = koniec snapshota / catch-up (`loading → ready`), nie zamknięcie obserwacji.
 
 Wygenerowany konstruktor:
 

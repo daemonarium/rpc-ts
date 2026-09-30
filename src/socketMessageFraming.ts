@@ -45,6 +45,7 @@ export type MessageChannelReader = IReader & FramingReader & {
 export abstract class SocketMessageChannelBase implements MessageChannel {
   readonly socket: LocalSocket
   protected handlingData = false
+  protected handleDataQueued = false
   protected readonly codecs: CodecRegistry
   protected readonly dispatchTable: DispatchEntry[] = []
   private minWritableBytes = 0
@@ -177,7 +178,11 @@ export abstract class SocketMessageChannelBase implements MessageChannel {
   }
 
   async handleData(): Promise<void> {
-    if (this.handlingData) return
+    if (this.handlingData) {
+      // Nested dataEvent during an in-flight parse: remember to drain after.
+      this.handleDataQueued = true
+      return
+    }
     this.handlingData = true
     try {
       const input = this.socket.inputBuffer
@@ -233,6 +238,10 @@ export abstract class SocketMessageChannelBase implements MessageChannel {
       }
     } finally {
       this.handlingData = false
+      if (this.handleDataQueued) {
+        this.handleDataQueued = false
+        void this.handleData()
+      }
     }
   }
 }
