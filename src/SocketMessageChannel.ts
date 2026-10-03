@@ -6,7 +6,6 @@
  * for cpp-rpc compatibility.
  */
 
-import { LocalSocket } from './LocalSocket.js'
 import { LocalCircularBufferReader } from './LocalCircularBufferReader.js'
 import { LocalCircularBufferWriter } from './LocalCircularBufferWriter.js'
 import { CodecRegistry } from './codec.js'
@@ -21,7 +20,7 @@ export class SocketMessageChannel extends SocketMessageChannelBase {
   private readonly reader: LocalCircularBufferReader
   private readonly writer: LocalCircularBufferWriter
 
-  constructor(socket: LocalSocket, codecs: CodecRegistry) {
+  constructor(socket: SocketMessageChannelSocket, codecs: CodecRegistry) {
     super(socket, codecs)
     this.reader = new LocalCircularBufferReader(socket.inputBuffer, codecs)
     this.writer = new LocalCircularBufferWriter(socket.outputBuffer, codecs)

@@ -6,7 +6,6 @@
  *   [typeIndex u32 LE][encoded_size_0=N+1][root][writeRest frames…][u32 0 sentinel][payload]
  */
 
-import { LocalSocket } from './LocalSocket.js'
 import { FlatLocalCircularBufferReader } from './flatLocalCircularBufferReader.js'
 import { FlatLocalCircularBufferWriter } from './flatLocalCircularBufferWriter.js'
 import { CodecRegistry } from './codec.js'
@@ -21,7 +20,7 @@ export class FlatSocketMessageChannel extends SocketMessageChannelBase {
   private readonly reader: FlatLocalCircularBufferReader
   private readonly writer: FlatLocalCircularBufferWriter
 
-  constructor(socket: LocalSocket, codecs: CodecRegistry) {
+  constructor(socket: SocketMessageChannelSocket, codecs: CodecRegistry) {
     super(socket, codecs)
     this.reader = new FlatLocalCircularBufferReader(socket.inputBuffer, codecs)
     this.writer = new FlatLocalCircularBufferWriter(socket.outputBuffer, codecs)

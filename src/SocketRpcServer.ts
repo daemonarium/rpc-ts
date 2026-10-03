@@ -2,7 +2,6 @@ import type { TypeRegistry } from './typeDescription.js'
 import { CodecRegistry } from './codec.js'
 import { SocketMessageChannel } from './SocketMessageChannel.js'
 import { FlatSocketMessageChannel } from './FlatSocketMessageChannel.js'
-import { LocalSocket } from './LocalSocket.js'
 import {
   ensureRpcTypesInRegistry,
   ensureRpcCodecs,
@@ -16,7 +15,7 @@ import { TypeKind } from './typeDescription.js'
 import { serializeValueByType, deserializeValueByType, type JsonValue } from './valueSerialization.js'
 import { RpcMethodDispatcher } from './RpcMethodDispatcher.js'
 import { RpcException } from './RpcException.js'
-import type { SocketMessageChannelBase } from './socketMessageFraming.js'
+import type { SocketMessageChannelBase, SocketMessageChannelSocket } from './socketMessageFraming.js'
 import { SerializationFormat } from './serializationFormat.js'
 
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER)
@@ -90,7 +89,7 @@ function resolveExceptionWire(
 }
 
 function createRpcMessageChannel(
-  socket: LocalSocket,
+  socket: SocketMessageChannelSocket,
   codecs: CodecRegistry,
   options?: SocketRpcOptions
 ): SocketMessageChannelBase {
@@ -106,7 +105,7 @@ export class SocketRpcServer {
   private readonly methodDispatcher: RpcMethodDispatcher
 
   constructor(
-    socket: LocalSocket,
+    socket: SocketMessageChannelSocket,
     typeRegistry: TypeRegistry,
     codecs: CodecRegistry,
     options?: SocketRpcOptions

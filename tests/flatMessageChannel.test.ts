@@ -439,4 +439,55 @@ describe('FlatSocketMessageChannel', () => {
     expect(gotN).to.equal(7)
     expect(gotPayload).to.equal(payload)
   })
+
+  it('accepts a Socket that is not LocalSocket (LocalCircularBuffer grow still works)', async () => {
+    class FramingSocket implements SocketMessageChannelSocket {
+      constructor(private readonly inner: LocalSocket) {}
+      get index() { return this.inner.index }
+      get inputBuffer() { return this.inner.inputBuffer }
+      get outputBuffer() { return this.inner.outputBuffer }
+      isOpen() { return this.inner.isOpen() }
+      getFlags() { return this.inner.getFlags() }
+      isReadable() { return this.inner.isReadable() }
+      isWritable() { return this.inner.isWritable() }
+      hasError() { return this.inner.hasError() }
+      readableBytes() { return this.inner.readableBytes() }
+      writableBytes() { return this.inner.writableBytes() }
+      read(destination: Uint8Array, bytes: number) { return this.inner.read(destination, bytes) }
+      write(source: Uint8Array | ArrayBufferView, bytes: number) { return this.inner.write(source, bytes) }
+      peek(offset: number, destination: Uint8Array, bytes: number) {
+        return this.inner.peek(offset, destination, bytes)
+      }
+      poke(offset: number, source: Uint8Array, bytes: number) {
+        return this.inner.poke(offset, source, bytes)
+      }
+      skipRead(bytes: number) { return this.inner.skipRead(bytes) }
+      commitWrite(bytes: number) { return this.inner.commitWrite(bytes) }
+      readUVarInt() { return this.inner.readUVarInt() }
+      writeUVarInt(value: number | bigint) { return this.inner.writeUVarInt(value) }
+      readSVarInt() { return this.inner.readSVarInt() }
+      writeSVarInt(value: number | bigint) { return this.inner.writeSVarInt(value) }
+      flush() { this.inner.flush() }
+      drain() { this.inner.drain() }
+      reserveForReading(size: number) { return this.inner.reserveForReading(size) }
+      getOptions() { return this.inner.getOptions() }
+      setOptions(options: Parameters<LocalSocket['setOptions']>[0]) { this.inner.setOptions(options) }
+    }
+
+    const codecs = new CodecRegistry()
+    registerPingPongCodecs(codecs)
+    const raw = createLoopbackPair()
+    const s0 = new FramingSocket(raw.s0 as LocalSocket)
+    const s1 = new FramingSocket(raw.s1 as LocalSocket)
+    const ch0 = new FlatSocketMessageChannel(s0, codecs)
+    const ch1 = new FlatSocketMessageChannel(s1, codecs)
+    ch0.registerMessageType('ping')
+    ch1.registerMessageType('ping')
+    let seq = 0
+    ch1.onMessage('ping', (msg: unknown) => { seq = (msg as Ping).seq })
+    ch0.sendMessage('ping', { seq: 99 })
+    raw.transfer(s0, s1)
+    await ch1.handleData()
+    expect(seq).to.equal(99)
+  })
 })

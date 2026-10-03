@@ -1,11 +1,11 @@
-import { LocalCircularBuffer } from './LocalCircularBuffer.js'
+import { type CircularBuffer, ensureCircularWritable } from './CircularBuffer.js'
 import { CodecRegistry } from './codec.js'
 import { FlatWriterBase, type FlatSink } from './flatWriterBase.js'
 import { storeLeU32 } from './flatEncoding.js'
 
 class CircularFlatSink implements FlatSink {
   constructor(
-    private readonly buffer: LocalCircularBuffer,
+    private readonly buffer: CircularBuffer,
     private offsetRef: { offset: number }
   ) {}
 
@@ -33,21 +33,19 @@ class CircularFlatSink implements FlatSink {
   }
 
   private ensureWritable(bytes: number): void {
-    const required = this.offsetRef.offset + bytes
-    if (this.buffer.writableBytes() < required) {
-      this.buffer.grow(required)
-    }
+    ensureCircularWritable(this.buffer, this.offsetRef.offset + bytes)
   }
 }
 
 /**
- * Flat LE writer into LocalCircularBuffer via poke (no auto-commit).
+ * Flat LE writer into CircularBuffer via poke (no auto-commit).
+ * Grows when the buffer supports grow(); throws if full.
  * Caller commits with buffer.commitWrite(writer.offset).
  */
 export class FlatLocalCircularBufferWriter extends FlatWriterBase {
   private readonly offsetRef: { offset: number }
 
-  constructor(buffer: LocalCircularBuffer, codecs: CodecRegistry, offset: number = 0) {
+  constructor(buffer: CircularBuffer, codecs: CodecRegistry, offset: number = 0) {
     const offsetRef = { offset }
     super(new CircularFlatSink(buffer, offsetRef), codecs)
     this.offsetRef = offsetRef

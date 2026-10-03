@@ -103,6 +103,11 @@ export class FlatWriterBase implements IWriter {
     this.sink.writeRaw(buf)
   }
 
+  writeRaw(bytes: Uint8Array): void {
+    if (bytes.length === 0) return
+    this.sink.writeRaw(bytes)
+  }
+
   writeI8(value: number): void {
     const buf = new Uint8Array(1)
     storeLeI8(buf, 0, value)

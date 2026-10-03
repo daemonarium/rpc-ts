@@ -16,7 +16,6 @@ import { serializeValueByType, deserializeValueByType, type JsonValue } from './
 import { RpcException } from './RpcException.js'
 import type { RpcClient } from './RpcClient.js'
 import type { SocketMessageChannelBase } from './socketMessageFraming.js'
-import type { LocalSocket } from './LocalSocket.js'
 import { SerializationFormat } from './serializationFormat.js'
 import type { MessageChannel } from './MessageChannel.js'
 
@@ -31,7 +30,7 @@ function toRequestId(value: number | bigint): bigint {
 }
 
 function createRpcMessageChannel(
-  socket: LocalSocket,
+  socket: SocketMessageChannelSocket,
   codecs: CodecRegistry,
   options?: SocketRpcOptions
 ): SocketMessageChannelBase {
@@ -148,9 +147,13 @@ export class SocketRpcClient implements RpcClient, MessageChannel {
     if (args.length !== parameterTypes.length) {
       throw new Error(`Argument count mismatch: expected ${parameterTypes.length}, got ${args.length}`)
     }
+    // Match C++ serialize(std::tuple<Args...>): UDT frame + save_offset per element.
+    writer.beginFrame()
     for (let i = 0; i < args.length; i++) {
       serializeValueByType(writer, this.typeRegistry, parameterTypes[i], args[i] as JsonValue)
+      writer.saveOffset()
     }
+    writer.endFrame()
     writer.writeRest()
     this.messageChannel.commitSend()
     return promise
@@ -182,9 +185,12 @@ export class SocketRpcClient implements RpcClient, MessageChannel {
     if (args.length !== parameterTypes.length) {
       throw new Error(`Argument count mismatch: expected ${parameterTypes.length}, got ${args.length}`)
     }
+    writer.beginFrame()
     for (let i = 0; i < args.length; i++) {
       serializeValueByType(writer, this.typeRegistry, parameterTypes[i], args[i] as JsonValue)
+      writer.saveOffset()
     }
+    writer.endFrame()
     writer.writeRest()
     this.messageChannel.commitSend()
     return promise

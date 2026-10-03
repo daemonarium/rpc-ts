@@ -36,6 +36,7 @@ const DATA_OFFSET = 12
 export class ModuleCircularBuffer implements CircularBuffer {
   private memory: WebAssembly.Memory
   private ptrAddress: number  // address in WASM memory where the circular_buffer_data* pointer is stored
+  private readonly directStruct: boolean
 
   /**
    * Creates a ModuleCircularBuffer that operates on WebAssembly memory.
@@ -43,18 +44,29 @@ export class ModuleCircularBuffer implements CircularBuffer {
    * so it stays correct after circular_buffer_grow reallocations and memory growth.
    *
    * @param memory WebAssembly memory instance
-   * @param ptrAddress Address in WASM memory where the pointer to circular_buffer_data is stored
+   * @param ptrAddress Address in WASM memory where the pointer to circular_buffer_data is stored,
+   *   or the struct address itself when `directStruct` is true (HEAP: struct never moves)
+   * @param directStruct When true, `ptrAddress` is the circular_buffer_data struct, not a pointer slot
    */
-  constructor(memory: WebAssembly.Memory, ptrAddress: number) {
+  constructor(memory: WebAssembly.Memory, ptrAddress: number, directStruct = false) {
     this.memory = memory
     this.ptrAddress = ptrAddress
+    this.directStruct = directStruct
   }
 
   /**
    * Read the current circular_buffer_data pointer from WASM memory
    */
   private getBufferPtr(): number {
+    if (this.directStruct) return this.ptrAddress
     return new DataView(this.memory.buffer).getUint32(this.ptrAddress, true)
+  }
+
+  /**
+   * JS cannot realloc WASM-side circular_buffer. C-side grow is a later export.
+   */
+  grow(_newMinimumSize: number): boolean {
+    return false
   }
 
   private getView(): DataView {

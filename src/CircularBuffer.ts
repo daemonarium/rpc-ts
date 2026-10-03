@@ -197,4 +197,29 @@ export interface CircularBuffer {
    * @returns Number of bytes copied
    */
   copyTo(destination: CircularBuffer): number
+
+  /**
+   * Grow so the buffer can hold at least `newMinimumSize` bytes of data capacity.
+   * Returns the new capacity, or false when the buffer cannot grow.
+   * Optional: implementations that cannot grow may omit this.
+   */
+  grow?(newMinimumSize: number): number | boolean
+}
+
+/**
+ * Ensure `required` writable bytes (including uncommitted poke space).
+ * Calls `grow` when present; throws if the buffer is still too small.
+ */
+export function ensureCircularWritable(
+  buffer: CircularBuffer,
+  required: number,
+  message = 'flat circular writer: buffer full'
+): void {
+  if (buffer.writableBytes() >= required) return
+  if (typeof buffer.grow === 'function') {
+    buffer.grow(required)
+  }
+  if (buffer.writableBytes() < required) {
+    throw new Error(message)
+  }
 }

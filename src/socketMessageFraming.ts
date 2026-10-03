@@ -3,14 +3,25 @@
  * Body layout is policy-specific via writeMessageBody / readMessageBody.
  */
 
-import { LocalSocket } from './LocalSocket.js'
+import type { Socket } from './Socket.js'
+import type { SocketOptions } from './LocalSocket.js'
 import type { IWriter, IReader } from './writerTypes.js'
 import { CodecRegistry } from './codec.js'
 import type { MessageChannel } from './MessageChannel.js'
 
 export const SOCKET_MESSAGE_LENGTH_SIZE = 4
 
-export type SocketMessageChannelSocket = LocalSocket
+/**
+ * Process-side Socket used by SocketMessageChannel.
+ * LocalSocket and HeapSocket implement this; ModuleSocket is host-side and does not.
+ */
+export interface SocketMessageChannelSocket extends Socket {
+  flush(): void
+  drain(): void
+  reserveForReading(size: number): number
+  getOptions(): SocketOptions
+  setOptions(options: Partial<SocketOptions>): void
+}
 
 export interface DispatchEntry {
   typeName: string
@@ -43,7 +54,7 @@ export type MessageChannelReader = IReader & FramingReader & {
  * dispatch table, onMessage arity → payloadSize.
  */
 export abstract class SocketMessageChannelBase implements MessageChannel {
-  readonly socket: LocalSocket
+  readonly socket: SocketMessageChannelSocket
   protected handlingData = false
   protected handleDataQueued = false
   protected readonly codecs: CodecRegistry
@@ -52,7 +63,7 @@ export abstract class SocketMessageChannelBase implements MessageChannel {
   private readonly writableHandlers: Array<() => void> = []
   private writableHookInstalled = false
 
-  constructor(socket: LocalSocket, codecs: CodecRegistry) {
+  constructor(socket: SocketMessageChannelSocket, codecs: CodecRegistry) {
     this.socket = socket
     this.codecs = codecs
   }

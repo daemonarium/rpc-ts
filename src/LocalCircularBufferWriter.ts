@@ -1,11 +1,10 @@
-import { LocalCircularBuffer } from './LocalCircularBuffer.js'
+import { type CircularBuffer, ensureCircularWritable } from './CircularBuffer.js'
 import { CodecRegistry, type TypedValue } from './codec.js'
 import type { IWriter, WriteLater } from './writerTypes.js'
 
 /**
- * Writer for LocalCircularBuffer that automatically grows the buffer when
- * more space is needed during write (like the C++ circular_buffer_writer
- * with circular_buffer_reserve_for_writing).
+ * Writer for CircularBuffer that grows when the buffer supports grow().
+ * Throws if the buffer is full and cannot grow (HEAP / ModuleCircularBuffer).
  */
 export class LocalCircularBufferWriter implements IWriter {
   private readonly textEncoder = new TextEncoder()
@@ -15,7 +14,7 @@ export class LocalCircularBufferWriter implements IWriter {
   private readonly scratchView = new DataView(this.scratch)
 
   constructor(
-    private readonly buffer: LocalCircularBuffer,
+    private readonly buffer: CircularBuffer,
     private readonly codecs: CodecRegistry,
     public offset: number = 0
   ) {
@@ -33,13 +32,14 @@ export class LocalCircularBufferWriter implements IWriter {
 
   /**
    * Ensures at least `bytes` bytes are writable at current offset.
-   * Grows the buffer if necessary (LocalCircularBuffer.grow).
+   * Grows the buffer when it supports grow(); otherwise throws if full.
    */
   private ensureWritable(bytes: number): void {
-    const required = this.offset + bytes
-    if (this.buffer.writableBytes() < required) {
-      this.buffer.grow(required)
-    }
+    ensureCircularWritable(
+      this.buffer,
+      this.offset + bytes,
+      'circular writer: buffer full'
+    )
   }
 
   writeU64(value: bigint | number): void {

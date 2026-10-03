@@ -85,9 +85,10 @@ Obowiązkowe metody (używane przez `valueSerialization` i codecs):
 
 ## Message / RPC
 
-- [`SocketMessageChannel`](src/SocketMessageChannel.ts) — compressed: `[len 4B LE][type u64 varint][body][writeRest][payload]`
+- [`SocketMessageChannel`](src/SocketMessageChannel.ts) — compressed: `[len 4B LE][type u64 varint][body][writeRest][payload]`. Przyjmuje `Socket` (process-side: `SocketMessageChannelSocket`) — nie tylko `LocalSocket`.
 - [`FlatSocketMessageChannel`](src/FlatSocketMessageChannel.ts) — flat: `[len][type u32 LE][encoded_size_0][root][writeRest…][sentinel 0][payload]` (wspólne framing: [`socketMessageFraming.ts`](src/socketMessageFraming.ts))
-- [`SocketRpcServer`](src/SocketRpcServer.ts) / [`SocketRpcClient`](src/SocketRpcClient.ts) — domyślnie flat; compressed opt-in: `new SocketRpcServer(socket, registry, codecs, { format: 'compressed' })`
+- [`LocalCircularBufferWriter`](src/LocalCircularBufferWriter.ts) / [`FlatLocalCircularBufferWriter`](src/flatLocalCircularBufferWriter.ts) — dowolny [`CircularBuffer`](src/CircularBuffer.ts); `grow` opcjonalne. Bez grow i pełny bufor → throw.
+- [`SocketRpcServer`](src/SocketRpcServer.ts) / [`SocketRpcClient`](src/SocketRpcClient.ts) — ctor: `socket: Socket`; domyślnie flat; compressed opt-in: `new SocketRpcServer(socket, registry, codecs, { format: 'compressed' })`
 - Nazwa [`SocketMessageChannel`](src/SocketMessageChannel.ts) = ścieżka **compressed**; flat = `FlatSocketMessageChannel`
 - C++ opt-in compressed USER: `WAOS_MODULE_RPC_COMPRESSED` ([`module.hpp`](../cpp-rpc/src/utils/module.hpp))
 - [`MessageChannel`](src/MessageChannel.ts) — węższy interfejs (`registerMessageType` / `onMessage` / `sendMessage` / `tryQueueMessage` / `isWritable` / `onWritable`). `tryQueueMessage` zwraca `false` gdy kanał pełen (C++ `try_queue_message`, bez flusha). [`SocketMessageChannelBase`](src/socketMessageFraming.ts) implementuje go; [`SocketRpcClient`](src/SocketRpcClient.ts) to pass-through — jeden obiekt spełnia **Starter + Channel**.

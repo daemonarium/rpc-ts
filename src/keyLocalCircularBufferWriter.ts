@@ -62,10 +62,8 @@ export class KeyLocalCircularBufferWriter implements IWriter {
     this.done = true
     if (blob.length === 0) return blob
 
-    // Grow LocalCircularBuffer if needed (other CircularBuffer impls may not grow).
-    const growable = this.buffer as CircularBuffer & { grow?: (n: number) => number }
-    if (typeof growable.grow === 'function' && this.buffer.writableBytes() < blob.length) {
-      growable.grow(this.buffer.capacity() + blob.length)
+    if (this.buffer.writableBytes() < blob.length && typeof this.buffer.grow === 'function') {
+      this.buffer.grow(this.buffer.capacity() + blob.length)
     }
 
     const written = this.buffer.write(blob, blob.length)

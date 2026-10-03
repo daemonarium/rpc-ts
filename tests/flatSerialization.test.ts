@@ -410,4 +410,14 @@ describe('flat circular + cross medium parity', () => {
     expect(buffer.peek(0, circBytes, circBytes.length)).to.equal(circBytes.length)
     expect(bytesToHex(circBytes)).to.equal(bytesToHex(abBytes))
   })
+
+  it('throws when circular buffer is full and cannot grow', () => {
+    const codecs = new CodecRegistry()
+    const buffer = new LocalCircularBuffer(8)
+    buffer.grow = () => false
+    const writer = new FlatLocalCircularBufferWriter(buffer, codecs, 0)
+    expect(() => writer.writeString('this string is far too long for eight bytes')).to.throw(
+      'flat circular writer: buffer full'
+    )
+  })
 })
