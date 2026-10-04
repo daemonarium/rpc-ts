@@ -219,15 +219,15 @@ export class TypeRegistry {
       if (type.kind !== TypeKind.Object && type.kind !== TypeKind.DynamicObject) {
         return false
       }
-      return type.members?.some(member => 
-        member.type.kind === TypeKind.Method || member.type.kind === TypeKind.Function
+      return type.members?.some(member =>
+        member.type?.kind === TypeKind.Method || member.type?.kind === TypeKind.Function
       ) || false
     })
 
     // Assign methodId to each method/function
     for (const objectType of objectTypes) {
-      const methodMembers = objectType.members?.filter(member => 
-        member.type.kind === TypeKind.Method || member.type.kind === TypeKind.Function
+      const methodMembers = objectType.members?.filter(member =>
+        member.type?.kind === TypeKind.Method || member.type?.kind === TypeKind.Function
       ) || []
 
       for (const methodMember of methodMembers) {

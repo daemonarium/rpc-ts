@@ -147,14 +147,15 @@ export class SocketRpcClient implements RpcClient, MessageChannel {
     if (args.length !== parameterTypes.length) {
       throw new Error(`Argument count mismatch: expected ${parameterTypes.length}, got ${args.length}`)
     }
-    // Match C++ serialize(std::tuple<Args...>): UDT frame + save_offset per element.
+    // Match C++ argument frame: fields, then deferred pointer bodies, then the tuple trailer.
+    // Pointer-free calls writeRest is a no-op, so the bytes stay the same.
     writer.beginFrame()
     for (let i = 0; i < args.length; i++) {
       serializeValueByType(writer, this.typeRegistry, parameterTypes[i], args[i] as JsonValue)
       writer.saveOffset()
     }
-    writer.endFrame()
     writer.writeRest()
+    writer.endFrame()
     this.messageChannel.commitSend()
     return promise
   }
@@ -190,8 +191,8 @@ export class SocketRpcClient implements RpcClient, MessageChannel {
       serializeValueByType(writer, this.typeRegistry, parameterTypes[i], args[i] as JsonValue)
       writer.saveOffset()
     }
-    writer.endFrame()
     writer.writeRest()
+    writer.endFrame()
     this.messageChannel.commitSend()
     return promise
   }

@@ -110,6 +110,13 @@ export class StreamMultiplexer<
     }
   }
 
+  /** Attach a receiver for an id allocated outside createStream (gateway ref_id). */
+  attachReceiver(streamId: bigint | number, receiver: StreamReceiver | null): void {
+    const id = toStreamId(streamId)
+    if (receiver) this.receivers.set(id, receiver)
+    else this.receivers.delete(id)
+  }
+
   size(): number {
     return this.receivers.size
   }
