@@ -33,7 +33,7 @@ export class FlatWriterBase implements IWriter {
   ) {}
 
   deferredPointerUsesTypeIndex(): boolean {
-    return false
+    return true
   }
 
   beginFrame(): void {

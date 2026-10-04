@@ -37,7 +37,7 @@ export class FlatReaderBase implements IReader {
   }
 
   deferredPointerUsesTypeIndex(): boolean {
-    return false
+    return true
   }
 
   enterFrame(): void {

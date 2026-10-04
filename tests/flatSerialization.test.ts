@@ -269,7 +269,7 @@ describe('flat pointer graph', () => {
         { name: 'label', type: registry.getTypeByName('string')!, annotations: [] },
       ],
     })
-    // Flat deferred pointers omit type index; pointee comes from schema (type.item).
+    // Flat deferred pointers carry a u32 type index (writeTyped). node is a DynamicObject.
     const nodePtr = TypeDescription.create({
       name: 'node*',
       kind: TypeKind.Pointer,

@@ -36,8 +36,8 @@ export interface IWriter {
   writePointer(value: unknown, writeLater: WriteLater): void
   writeRest(): void
   /**
-   * When true (compressed), deferred pointer bodies use writeTyped (type index on wire).
-   * When false (flat), deferred bodies are homogeneous serialize without type index.
+   * When true, deferred pointer bodies use writeTyped (type index on wire).
+   * Compressed and flat both do. Key format returns false and rejects pointers.
    */
   deferredPointerUsesTypeIndex(): boolean
   writeMap(

@@ -334,7 +334,7 @@ export function encodePersonGraphCompressed(types: PersonTypes, root: Person | n
 
 /**
  * Flat shared-root framing (matches C++ encode_flat_shared).
- * Deferred friend bodies are Person frames WITHOUT typed index.
+ * Each deferred friend body is [u32 type index][Person frame].
  */
 export function encodePersonGraphFlat(types: PersonTypes, root: Person | null): Uint8Array {
   const w = new FlatWriter(types.codecs)
@@ -366,7 +366,10 @@ function serializePersonFlatBody(w: IWriter, types: PersonTypes, person: Person)
   w.writeLength(n.friends.length)
   for (const friend of n.friends) {
     w.writePointer(friend, () => {
-      if (friend) serializePersonFlatBody(w, types, friend)
+      if (!friend) return
+      // Same index C++ register_serialize_typed_function<Person> emits (Person is the only dynamic type).
+      w.writeU32(types.codecs.typed.getIndexOrThrow('Person'))
+      serializePersonFlatBody(w, types, friend)
     })
   }
   w.endFrame()
@@ -407,6 +410,11 @@ function deserializePersonFlatBody(r: IReader, types: PersonTypes, out: Person):
   for (let i = 0; i < n; ++i) {
     const idx = i
     r.readPointer((value) => { out.friends[idx] = value as Person | null }, (output) => {
+      const index = r.readU32()
+      const personIndex = types.codecs.typed.getIndexOrThrow('Person')
+      if (index !== personIndex) {
+        throw new Error(`flat person graph: unexpected type index ${index}`)
+      }
       const child = emptyPerson()
       child._type = 'Person'
       deserializePersonFlatBody(r, types, child)
