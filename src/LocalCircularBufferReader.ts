@@ -274,6 +274,11 @@ export class LocalCircularBufferReader implements IReader {
     return result.value
   }
 
+  readRaw(dest: Uint8Array): void {
+    const got = this.readBytes(dest.length)
+    dest.set(got)
+  }
+
   private readBytes(length: number): Uint8Array {
     if (length < 0) {
       throw new Error('Length cannot be negative')

@@ -11,10 +11,11 @@ import {
   MUX_SOCKET_DATA,
   MUX_SOCKET_CLOSE,
   MUX_SOCKET_WINDOW,
+  MUX_KIND_PIPE,
   type MessageChannel,
   type SocketOptions
 } from '../src/index.js'
-import { FlatSocketMessageChannel } from '../src/FlatSocketMessageChannel.js'
+import { SocketMessageChannel } from '../src/SocketMessageChannel.js'
 
 class MockChannel implements MessageChannel {
   writable = true
@@ -72,18 +73,21 @@ describe('SocketMux', () => {
     })
     mux.openSocket(7)
     expect(ch.ofType(MUX_SOCKET_OPEN)).to.have.length(1)
+    const opened = ch.ofType(MUX_SOCKET_OPEN)[0] as { socket_id: number, kind: number, ref_id: number, cookie: number }
+    expect(opened.socket_id).to.equal(7)
+    expect(opened.kind).to.equal(0)
 
     mux.grantWindow(7, 100)
-    expect((ch.ofType(MUX_SOCKET_WINDOW)[0] as { add_bytes: bigint }).add_bytes).to.equal(100n)
+    expect((ch.ofType(MUX_SOCKET_WINDOW)[0] as { add_bytes: number }).add_bytes).to.equal(100)
 
-    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 7n, add_bytes: 100n })
+    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 7, add_bytes: 100 })
     const p = mux.sendData(7, payload(4, 9))
     expect(p.state).to.equal('resolved')
-    const data = ch.ofType(MUX_SOCKET_DATA)[0] as { socket_id: bigint, payload: Uint8Array }
-    expect(data.socket_id).to.equal(7n)
+    const data = ch.ofType(MUX_SOCKET_DATA)[0] as { socket_id: number, payload: Uint8Array }
+    expect(data.socket_id).to.equal(7)
     expect(Array.from(data.payload)).to.deep.equal([9, 9, 9, 9])
 
-    ch.emit(MUX_SOCKET_DATA, { socket_id: 7n, payload: payload(2, 3) })
+    ch.emit(MUX_SOCKET_DATA, { socket_id: 7, payload: payload(2, 3) })
     expect(received).to.have.length(1)
 
     mux.closeSocket(7)
@@ -99,13 +103,13 @@ describe('SocketMux', () => {
     expect(first.state).to.equal('pending')
     expect(ch.ofType(MUX_SOCKET_DATA)).to.have.length(0)
 
-    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 1n, add_bytes: 8n })
+    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 1, add_bytes: 8 })
     expect(first.state).to.equal('resolved')
     expect(ch.ofType(MUX_SOCKET_DATA)).to.have.length(1)
 
     const second = mux.sendData(1, payload(8))
     expect(second.state).to.equal('pending')
-    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 1n, add_bytes: 8n })
+    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 1, add_bytes: 8 })
     expect(second.state).to.equal('resolved')
   })
 
@@ -113,10 +117,10 @@ describe('SocketMux', () => {
     const ch = new MockChannel()
     const mux = new SocketMux(ch)
     mux.openSocket(1)
-    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 1n, add_bytes: 10n })
+    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 1, add_bytes: 10 })
     const first = mux.sendData(1, payload(40))
     expect(first.state).to.equal('resolved')
-    expect(mux.remaining(1)).to.equal(0n)
+    expect(mux.remaining(1)).to.equal(0)
     const second = mux.sendData(1, payload(4))
     expect(second.state).to.equal('pending')
     expect(ch.ofType(MUX_SOCKET_DATA)).to.have.length(1)
@@ -127,12 +131,12 @@ describe('SocketMux', () => {
     const mux = new SocketMux(ch)
     mux.openSocket(1)
     mux.openSocket(2)
-    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 2n, add_bytes: 100n })
+    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 2, add_bytes: 100 })
     const blocked = mux.sendData(1, payload(8))
     const ok = mux.sendData(2, payload(8))
     expect(blocked.state).to.equal('pending')
     expect(ok.state).to.equal('resolved')
-    const ids = ch.ofType(MUX_SOCKET_DATA).map((msg) => Number((msg as { socket_id: bigint }).socket_id))
+    const ids = ch.ofType(MUX_SOCKET_DATA).map((msg) => Number((msg as { socket_id: number }).socket_id))
     expect(ids).to.deep.equal([2])
   })
 
@@ -141,8 +145,8 @@ describe('SocketMux', () => {
     const mux = new SocketMux(ch, { quantum: 1 })
     mux.openSocket(1)
     mux.openSocket(2)
-    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 1n, add_bytes: 100n })
-    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 2n, add_bytes: 100n })
+    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 1, add_bytes: 100 })
+    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 2, add_bytes: 100 })
     ch.writable = false
     mux.sendData(1, payload(4, 1))
     mux.sendData(1, payload(4, 1))
@@ -150,7 +154,7 @@ describe('SocketMux', () => {
     mux.sendData(2, payload(4, 2))
     ch.writable = true
     ch.drain()
-    const ids = ch.ofType(MUX_SOCKET_DATA).map((msg) => Number((msg as { socket_id: bigint }).socket_id))
+    const ids = ch.ofType(MUX_SOCKET_DATA).map((msg) => Number((msg as { socket_id: number }).socket_id))
     expect(ids.filter((id) => id === 1).length).to.equal(2)
     expect(ids.filter((id) => id === 2).length).to.equal(2)
     expect(new Set(ids.slice(0, 2)).size).to.equal(2)
@@ -164,18 +168,18 @@ describe('SocketMux', () => {
     expect(blocked.state).to.equal('pending')
     mux.closeSocket(3)
     expect(blocked.state).to.equal('resolved')
-    expect(mux.remaining(3)).to.equal(0n)
-    expect(mux.sent(3)).to.equal(0n)
+    expect(mux.remaining(3)).to.equal(0)
+    expect(mux.sent(3)).to.equal(0)
     mux.openSocket(3)
-    expect(mux.remaining(3)).to.equal(0n)
+    expect(mux.remaining(3)).to.equal(0)
   })
 
   it('unknown socket_id is a no-op', () => {
     const ch = new MockChannel()
     const mux = new SocketMux(ch)
-    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 99n, add_bytes: 50n })
-    ch.emit(MUX_SOCKET_DATA, { socket_id: 99n, payload: payload(4) })
-    ch.emit(MUX_SOCKET_CLOSE, { socket_id: 99n })
+    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 99, add_bytes: 50 })
+    ch.emit(MUX_SOCKET_DATA, { socket_id: 99, payload: payload(4) })
+    ch.emit(MUX_SOCKET_CLOSE, { socket_id: 99 })
     const p = mux.sendData(99, payload(4))
     expect(p.state).to.equal('resolved')
     expect(ch.ofType(MUX_SOCKET_DATA)).to.have.length(0)
@@ -203,11 +207,37 @@ describe('SocketMux', () => {
     expect(ch.ofType(MUX_SOCKET_WINDOW)).to.have.length(1)
   })
 
+  it('open carries kind, ref_id and cookie', () => {
+    const ch = new MockChannel()
+    const mux = new SocketMux(ch)
+    mux.openSocket(4, MUX_KIND_PIPE, 0, 99)
+    const opened = ch.ofType(MUX_SOCKET_OPEN)[0] as {
+      socket_id: number, kind: number, ref_id: number, cookie: number
+    }
+    expect(opened).to.deep.include({ socket_id: 4, kind: MUX_KIND_PIPE, ref_id: 0, cookie: 99 })
+  })
+
+  it('duplex: both sides grant and send', () => {
+    const ch = new MockChannel()
+    const received: Uint8Array[] = []
+    const mux = new SocketMux(ch, {
+      onData: (_id, bytes) => { received.push(bytes) }
+    })
+    mux.openSocket(1, MUX_KIND_PIPE, 0, 1)
+    mux.grantWindow(1, 64)
+    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 1, add_bytes: 64 })
+    const p = mux.sendData(1, payload(4, 8))
+    expect(p.state).to.equal('resolved')
+    ch.emit(MUX_SOCKET_DATA, { socket_id: 1, payload: payload(3, 9) })
+    expect(received).to.have.length(1)
+    expect(Array.from(received[0])).to.deep.equal([9, 9, 9])
+  })
+
   it('channel not writable holds the frame until drain', () => {
     const ch = new MockChannel()
     const mux = new SocketMux(ch)
     mux.openSocket(1)
-    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 1n, add_bytes: 100n })
+    ch.emit(MUX_SOCKET_WINDOW, { socket_id: 1, add_bytes: 100 })
     ch.writable = false
     const p = mux.sendData(1, payload(8))
     expect(p.state).to.equal('pending')
@@ -236,8 +266,8 @@ describe('SocketMux loopback', () => {
     registerMessageCodecs(codecsB, registry)
     const a = new LocalSocket(0, SOCKET_OPTS)
     const b = new LocalSocket(1, SOCKET_OPTS)
-    const chA = new FlatSocketMessageChannel(a, codecsA)
-    const chB = new FlatSocketMessageChannel(b, codecsB)
+    const chA = new SocketMessageChannel(a, codecsA)
+    const chB = new SocketMessageChannel(b, codecsB)
     registerMuxSocketMessages(chA)
     registerMuxSocketMessages(chB)
     const got: Uint8Array[] = []

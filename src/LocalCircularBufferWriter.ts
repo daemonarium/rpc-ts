@@ -136,6 +136,12 @@ export class LocalCircularBufferWriter implements IWriter {
     this.offset += this.buffer.poke(this.offset, bytes, bytes.length)
   }
 
+  writeRaw(data: Uint8Array): void {
+    if (data.length === 0) return
+    this.ensureWritable(data.length)
+    this.offset += this.buffer.poke(this.offset, data, data.length)
+  }
+
   writeLength(length: number): void {
     if (length < 0) {
       throw new Error('Length cannot be negative')
