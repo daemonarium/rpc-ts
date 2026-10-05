@@ -3,7 +3,13 @@ import { ObservableState, type BinaryEntry } from './types.js'
 import type { Disposable, ReferenceOps } from './referenceOps.js'
 
 export type ObservableFactory<EntryT extends BinaryEntry = BinaryEntry> =
-  () => Observable<EntryT>
+  (since?: bigint) => Observable<EntryT>
+
+function toSince(value: bigint | number | undefined): bigint {
+  if (typeof value === 'bigint') return value
+  if (typeof value === 'number' && Number.isFinite(value)) return BigInt(value)
+  return 0n
+}
 
 /**
  * Thin handle for one remote dataset. Creating a Reference does no network.
@@ -37,12 +43,19 @@ export class RemoteReference<EntryT extends BinaryEntry = BinaryEntry> {
     return this.live
   }
 
-  stream(): Observable<EntryT> {
+  stream(since: bigint | number = 0n): Observable<EntryT> {
     this.ensureSet()
     if (this.live && this.live.activeCount() > 0) {
       return this.live
     }
-    const scan = this.adopt(this.scanFactory())
+    const scan = this.adopt(this.scanFactory(toSince(since)))
+    this.scans.add(scan)
+    return scan
+  }
+
+  fetch(since: bigint | number = 0n): Observable<EntryT> {
+    this.ensureSet()
+    const scan = this.adopt(this.scanFactory(toSince(since)))
     this.scans.add(scan)
     return scan
   }
@@ -63,6 +76,10 @@ export class RemoteReference<EntryT extends BinaryEntry = BinaryEntry> {
   /** Live observable if observable() was already called. Does not touch the network. */
   peekLive(): Observable<EntryT> | null {
     return this.live
+  }
+
+  bind(): void {
+    this.ensureSet()
   }
 
   private ensureSet(): void {

@@ -617,6 +617,34 @@ describe('RemoteReference', () => {
     expect(client.starts[0].handle.flags).to.equal(stream_flags.none)
   })
 
+  it('fetch() while live starts a second scan', () => {
+    const client = new MockClient()
+    const mux = new StreamMultiplexer(client, 1, 1)
+    const registry = new RemoteRegistry(mux)
+    const ref = registry.getOrCreate(kDbStartScan, {})
+    const live = ref.observable()
+    live.subscribe(new RecordingConsumer())
+    expect(client.starts.length).to.equal(1)
+    const scan = ref.fetch()
+    expect(scan).to.not.equal(live)
+    scan.subscribe(new RecordingConsumer())
+    expect(client.starts.length).to.equal(2)
+    expect(client.starts[1].handle.flags).to.equal(stream_flags.none)
+    expect(ref.stream()).to.equal(live)
+  })
+
+  it('stream(since) without live forwards since', () => {
+    const client = new MockClient()
+    const mux = new StreamMultiplexer(client, 1, 1)
+    const registry = new RemoteRegistry(mux)
+    const ref = registry.getOrCreate(kDbStartScan, {})
+    const scan = ref.stream(5n)
+    scan.subscribe(new RecordingConsumer())
+    expect(client.starts.length).to.equal(1)
+    expect(BigInt(client.starts[0].handle.since_timestamp)).to.equal(5n)
+    expect(client.starts[0].handle.flags).to.equal(stream_flags.none)
+  })
+
   it('hold() is a no-op drop in direct mode', () => {
     const client = new MockClient()
     const mux = new StreamMultiplexer(client, 1, 1)

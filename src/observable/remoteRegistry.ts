@@ -73,7 +73,11 @@ export class RemoteRegistry<
     const ref = new RemoteReference(
       ops,
       () => new RemoteObservable<Starter, Channel>(this.mux, fid, stream_flags.observe, ...args),
-      () => new RemoteObservable<Starter, Channel>(this.mux, fid, stream_flags.none, ...args),
+      (since = 0n) => {
+        const obs = new RemoteObservable<Starter, Channel>(this.mux, fid, stream_flags.none, ...args)
+        obs.withSince(since)
+        return obs
+      },
     )
     this.entries.push({ key, ref })
     return ref

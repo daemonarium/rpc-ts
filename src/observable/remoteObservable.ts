@@ -24,6 +24,8 @@ export class RemoteObservable<
   private readonly flags_: number
   private readonly args_: unknown[]
   private streamId_ = 0n
+  private since_ = 0n
+  private started_ = false
 
   constructor(
     mux: StreamMultiplexer<Starter, Channel>,
@@ -40,6 +42,11 @@ export class RemoteObservable<
 
   streamId(): bigint {
     return this.streamId_
+  }
+
+  withSince(since: bigint | number): this {
+    this.since_ = typeof since === 'bigint' ? since : BigInt(since)
+    return this
   }
 
   functionId(): bigint {
@@ -77,7 +84,11 @@ export class RemoteObservable<
   }
 
   protected override onStart(): void {
-    this.streamId_ = this.mux.createStream(this.functionId_, this.maxTs(), this, this.flags_, ...this.args_)
+    const since = this.flags_ === stream_flags.observe || this.started_
+      ? this.maxTs()
+      : this.since_
+    this.started_ = true
+    this.streamId_ = this.mux.createStream(this.functionId_, since, this, this.flags_, ...this.args_)
   }
 
   protected override onStop(): void {

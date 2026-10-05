@@ -30,15 +30,19 @@ export class DirectReferenceOps<
 
   setReference(): void {}
 
-  observe(receiver: StreamReceiver): void {
+  observe(receiver: StreamReceiver, since: bigint | number = 0n): void {
     this.streamId = this.mux.createStream(
-      this.functionId, 0n, receiver, stream_flags.observe, ...this.args
+      this.functionId, since, receiver, stream_flags.observe, ...this.args
     )
   }
 
-  fetch(receiver: StreamReceiver): void {
+  fetch(
+    receiver: StreamReceiver,
+    flags: number = stream_flags.none,
+    since: bigint | number = 0n
+  ): void {
     this.streamId = this.mux.createStream(
-      this.functionId, 0n, receiver, stream_flags.none, ...this.args
+      this.functionId, since, receiver, flags, ...this.args
     )
   }
 

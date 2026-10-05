@@ -114,7 +114,7 @@ Backpressure: `onChange` zwraca `ObservablePromise` (resolved = sync, pending = 
 
 Adapter kernelowy (opcjonalny): [`../ts-kernel/src/KernelStreamEndpoint.ts`](../ts-kernel/src/KernelStreamEndpoint.ts) — para `(pid, socket)` jako `MessageChannel`. Rdzeń w `ts-rpc` działa bez kernela (`MockChannel` w testach).
 
-Generator **TS Client** używa `RemoteRegistry.getOrCreate` — zwraca `RemoteReference`. Live: `ref.observable()`, skan: `ref.stream()`.
+Generator **TS Client** używa `RemoteRegistry.getOrCreate` — zwraca `RemoteReference`. Live: `ref.observable()`, skan: `ref.stream(since)` (reuse live gdy `activeCount() > 0`) albo `ref.fetch(since)` (zawsze nowy skan).
 
 ---
 
@@ -127,7 +127,7 @@ C++ annotacje member-level w [`../cpp-rpc/src/serialization/annotations.hpp`](..
 - `[[=serialization::observable()]]` — live strumień (tail-and-catch). Generator dodaje overload bez `stream_handle` zwracający `RemoteReference` (ta sama nazwa, np. `table(...)`).
 - `[[=serialization::streamable()]]` — skończony strumień, nie obserwowalny. Generator dodaje `<method>_stream` zwracające `RemoteReference`.
 
-Oryginalna metoda RPC zostaje (pierwszy parametr `stream_handle` zostaje jawny). Extra pomija `stream_handle` i zwraca `RemoteReference`. `observable()` startuje `flags=observe`; `stream()` — `flags=none` (kończy się `stream_done`) albo reuse live gdy `activeCount() > 0`. `stream_done` = koniec snapshota / catch-up (`loading → ready`), nie zamknięcie obserwacji.
+Oryginalna metoda RPC zostaje (pierwszy parametr `stream_handle` zostaje jawny). Extra pomija `stream_handle` i zwraca `RemoteReference`. `observable()` startuje `flags=observe`; `stream(since)` — reuse live gdy `activeCount() > 0`, inaczej `flags=none` z podanym `since`; `fetch(since)` zawsze nowy skan (`flags=none`). `stream_done` = koniec snapshota / catch-up (`loading → ready`), nie zamknięcie obserwacji.
 
 Server-side flavor is transparent to the client: a high-level method
 that returns `shared_ptr<Observable<BinaryEntry>>` (no `stream_handle`
@@ -157,6 +157,7 @@ const client = new ObservableDbClient(driver, tsPid, 1, scanClient)
 const ref = client.table(tableId, lower, lowerMode, upper, upperMode, 0n, false, false)
 const watch = ref.observable()
 const scan = ref.stream()
+const alwaysScan = ref.fetch()
 watch.subscribe(consumer)
 ```
 
