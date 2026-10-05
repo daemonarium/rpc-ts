@@ -131,6 +131,24 @@ export { DirectReferenceOps } from './observable/directReferenceOps.js'
 export { StreamRelayConsumer } from './observable/streamRelayConsumer.js'
 export { StreamPublisher } from './observable/streamPublisher.js'
 export {
+  SocketMux,
+  addMuxSocketTypes,
+  registerMuxSocketMessages,
+  MUX_SOCKET_OPEN,
+  MUX_SOCKET_DATA,
+  MUX_SOCKET_CLOSE,
+  MUX_SOCKET_WINDOW,
+  MUX_SOCKET_MESSAGE_TYPES,
+  MUX_SOCKET_RPC_RESERVED,
+  DEFAULT_MUX_WINDOW,
+  DEFAULT_MUX_QUANTUM,
+  type MuxSocketOpen,
+  type MuxSocketData,
+  type MuxSocketClose,
+  type MuxSocketWindow,
+  type SocketMuxOptions,
+} from './observable/socketMux.js'
+export {
   RemoteRegistry,
   serializeObservationArgs,
   observationKeyId,
