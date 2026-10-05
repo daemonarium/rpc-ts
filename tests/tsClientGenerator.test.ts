@@ -114,42 +114,40 @@ describe('TS Client generator', () => {
     expect(isMemberStreamable(ping)).to.equal(false)
   })
 
-  it('keeps the original methods and adds *_observable / *_stream', () => {
+  it('keeps the original methods and adds a RemoteReference extra', () => {
     const code = generateTsClient(buildClientRegistry(), { className: 'ObservableDbClient' })
     expect(code).to.include('export class ObservableDbClient')
     expect(code).to.match(/ping\(msg: string\): Promise<string>/)
     expect(code).to.match(/table_watch\(/)
-    expect(code).to.match(/table_watch_observable\(/)
+    expect(code).to.match(/table_watch\([^)]*\): RemoteReference/)
     expect(code).to.match(/table_scan\(/)
     expect(code).to.match(/table_scan_stream\(/)
+    expect(code).to.not.match(/table_watch_observable\(/)
+    expect(code).to.not.match(/table_watch_stream\(/)
     expect(code).to.not.match(/ping_observable\(/)
     expect(code).to.not.match(/ping_stream\(/)
-    expect(code).to.not.match(/table_watch_stream\(/)
     expect(code).to.not.match(/table_scan_observable\(/)
   })
 
-  it('omits stream_handle from generated observable and stream methods', () => {
+  it('omits stream_handle from generated reference methods', () => {
     const code = generateTsClient(buildClientRegistry())
     const originalWatch = methodSignature(code, 'table_watch')
-    const extraWatch = methodSignature(code, 'table_watch_observable')
-    const extraScan = methodSignature(code, 'table_scan_stream')
-
     expect(originalWatch).to.include('stream: stream_handle')
     expect(originalWatch).to.include('table_id: number')
-    expect(extraWatch).to.not.include('stream_handle')
-    expect(extraWatch).to.match(/table_watch_observable\(table_id: number/)
+    expect(code).to.match(/table_watch\(table_id: number/)
+    expect(code).to.match(/table_scan_stream\(table_id: number/)
+    const extraScan = methodSignature(code, 'table_scan_stream')
     expect(extraScan).to.not.include('stream_handle')
-    expect(extraScan).to.match(/table_scan_stream\(table_id: number/)
   })
 
   it('emits RemoteRegistry.getOrCreate with the method id and remaining args', () => {
     const code = generateTsClient(buildClientRegistry())
-    expect(code).to.include('import { SocketRpcClient, RemoteObservable, RemoteRegistry, StreamMultiplexer, stream_flags, type MessageChannel } from \'@wa-os/ts-rpc\'')
+    expect(code).to.include('import { SocketRpcClient, RemoteReference, RemoteRegistry, StreamMultiplexer, type MessageChannel } from \'@wa-os/ts-rpc\'')
     expect(code).to.include('streamChannel?: MessageChannel')
     expect(code).to.include('new StreamMultiplexer(rpcClient, streamChannel, returnPid, returnSocket)')
     expect(code).to.include('this.rpcClient.call(')
-    expect(code).to.match(/table_watch_observable\([\s\S]*?return this\.remoteRegistry\.getOrCreate\(1, stream_flags.observe, table_id, lower_id\)/)
-    expect(code).to.match(/table_scan_stream\([\s\S]*?return this\.remoteRegistry\.getOrCreate\(2, stream_flags.none, table_id, limit\)/)
+    expect(code).to.match(/return this\.remoteRegistry\.getOrCreate\(1, \.\.\.args\)/)
+    expect(code).to.match(/table_scan_stream\([\s\S]*?return this\.remoteRegistry\.getOrCreate\(2, table_id, limit\)/)
   })
 
   it('accepts a custom import path', () => {

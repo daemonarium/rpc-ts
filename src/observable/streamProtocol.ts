@@ -28,6 +28,7 @@ export interface StreamItem {
   timestamp: bigint | number
 }
 
+/** keys_only live key. Tombstone in keys_only observe is StreamItem with empty value. */
 export interface StreamKey {
   stream_id: bigint | number
   key: Uint8Array

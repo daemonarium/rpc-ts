@@ -15,6 +15,7 @@ import {
   type StreamError,
   type StreamHandle,
   type StreamItem,
+  type StreamKey,
   type StreamOpened,
   type StreamReset,
 } from './streamProtocol.js'
@@ -137,6 +138,20 @@ export class StreamMultiplexer<
     })
     this.channel.onMessage('stream_item', (msg: StreamItem) => {
       this.dispatch(toStreamId(msg.stream_id), (r) => r.onStreamItem(msg))
+    })
+    this.channel.onMessage('stream_key', (msg: StreamKey) => {
+      this.dispatch(toStreamId(msg.stream_id), (r) => {
+        if (r.onStreamKey) {
+          r.onStreamKey(msg)
+          return
+        }
+        r.onStreamItem({
+          stream_id: msg.stream_id,
+          key: msg.key,
+          value: new Uint8Array([0]),
+          timestamp: msg.timestamp,
+        })
+      })
     })
     this.channel.onMessage('stream_done', (msg: StreamDone) => {
       this.dispatch(toStreamId(msg.stream_id), (r) => r.onStreamDone(msg))

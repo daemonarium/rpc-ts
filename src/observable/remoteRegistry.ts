@@ -1,13 +1,13 @@
 /**
- * Port of cpp-rpc/src/observable/remote_registry.hpp.
- *
- * Owns RemoteObservables keyed by (function_id, serialized args) so they
- * survive idle (0 consumers). Resubscribe reuses the same object and
- * therefore maxTs / the retained view (delta resume). v1: no eviction.
+ * Owns RemoteReferences keyed by (function_id, serialized args) so they
+ * survive idle (0 consumers). Resubscribe reuses the same live Observable
+ * and therefore maxTs / the retained view (delta resume). v1: no eviction.
  */
 
 import type { MessageChannel } from '../MessageChannel.js'
+import { DirectReferenceOps } from './directReferenceOps.js'
 import { RemoteObservable } from './remoteObservable.js'
+import { RemoteReference } from './remoteReference.js'
 import { stream_flags } from './streamProtocol.js'
 import type { StreamMultiplexer, StreamStarter } from './streamMultiplexer.js'
 
@@ -46,7 +46,7 @@ export class RemoteRegistry<
   Channel extends MessageChannel = MessageChannel
 > {
   private readonly mux: StreamMultiplexer<Starter, Channel>
-  private readonly entries: Array<{ key: ObservationKey, obs: RemoteObservable<Starter, Channel> }> = []
+  private readonly entries: Array<{ key: ObservationKey, ref: RemoteReference }> = []
 
   constructor(mux: StreamMultiplexer<Starter, Channel>) {
     this.mux = mux
@@ -54,22 +54,29 @@ export class RemoteRegistry<
 
   getOrCreate(
     functionId: bigint | number,
-    flags: number = stream_flags.none,
     ...args: unknown[]
-  ): RemoteObservable<Starter, Channel> {
+  ): RemoteReference {
     const fid = typeof functionId === 'bigint' ? functionId : BigInt(functionId)
     const key: ObservationKey = {
       functionId: fid,
       argsBytes: serializeObservationArgs(args),
     }
     for (const e of this.entries) {
-      if (e.key.functionId === key.functionId && argsEqual(e.key.argsBytes, key.argsBytes)) {
-        return e.obs
+      if (
+        e.key.functionId === key.functionId
+        && argsEqual(e.key.argsBytes, key.argsBytes)
+      ) {
+        return e.ref
       }
     }
-    const obs = new RemoteObservable<Starter, Channel>(this.mux, fid, flags, ...args)
-    this.entries.push({ key, obs })
-    return obs
+    const ops = new DirectReferenceOps(this.mux, fid, args)
+    const ref = new RemoteReference(
+      ops,
+      () => new RemoteObservable<Starter, Channel>(this.mux, fid, stream_flags.observe, ...args),
+      () => new RemoteObservable<Starter, Channel>(this.mux, fid, stream_flags.none, ...args),
+    )
+    this.entries.push({ key, ref })
+    return ref
   }
 
   size(): number {

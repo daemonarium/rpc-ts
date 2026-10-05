@@ -7,12 +7,14 @@ import {
   ObservablePromise,
   ObservableState,
   RemoteObservable,
+  RemoteReference,
   RemoteRegistry,
   SocketRpcClient,
   SocketRpcServer,
   StreamMultiplexer,
   StreamPublisher,
   STREAM_MESSAGE_TYPES,
+  stream_flags,
   TypeDescription,
   TypeKind,
   TypeRegistry,
@@ -24,6 +26,7 @@ import {
   type JsonValue,
   type Change,
   type Consumer,
+  type MessageChannel,
   type StreamCancel,
   type StreamHandle,
   type SocketMessageChannelSocket,
@@ -482,34 +485,36 @@ describe('remoteObservable (port of remote_observable_ut.cpp)', () => {
     expect(obs.state()).to.equal(ObservableState.idle)
   })
 
-  it('registry same key reuses observable across idle with delta resume', () => {
+  it('registry same key reuses reference across idle with delta resume', () => {
     const client = new MockClient()
     const mux = new StreamMultiplexer(client, 1, 1)
     const registry = new RemoteRegistry(mux)
     const q = {}
-    const a = registry.getOrCreate(kDbStartScan, 0, q)
-    const b = registry.getOrCreate(kDbStartScan, 0, q)
+    const a = registry.getOrCreate(kDbStartScan, q)
+    const b = registry.getOrCreate(kDbStartScan, q)
     expect(a).to.equal(b)
 
     const other = { limit: 10 }
-    const d = registry.getOrCreate(kDbStartScan, 0, other)
+    const d = registry.getOrCreate(kDbStartScan, other)
     expect(a).to.not.equal(d)
     expect(registry.size()).to.equal(2)
 
+    const live = a.observable()
     const c = new RecordingConsumer()
-    const out = a.subscribe(c)
-    a.onStreamItem({ stream_id: a.streamId(), key: bin('a'), value: bin('1'), timestamp: 10 })
-    a.onStreamDone({ stream_id: a.streamId() })
-    expect(a.maxTs()).to.equal(10n)
+    const out = live.subscribe(c)
+    const remote = live as RemoteObservable
+    remote.onStreamItem({ stream_id: remote.streamId(), key: bin('a'), value: bin('1'), timestamp: 10 })
+    remote.onStreamDone({ stream_id: remote.streamId() })
+    expect(live.maxTs()).to.equal(10n)
     out.unsubscribe()
-    expect(a.state()).to.equal(ObservableState.idle)
+    expect(live.state()).to.equal(ObservableState.idle)
     expect(registry.size()).to.equal(2)
 
     const c2 = new RecordingConsumer()
-    a.subscribe(c2)
+    live.subscribe(c2)
     expect(client.starts.length).to.equal(2)
     expect(BigInt(client.starts[1].handle.since_timestamp)).to.equal(10n)
-    expect(a).to.equal(registry.getOrCreate(kDbStartScan, 0, q))
+    expect(a).to.equal(registry.getOrCreate(kDbStartScan, q))
   })
 
   it('MockChannel tryQueueMessage false holds item ahead of control', () => {
@@ -536,3 +541,107 @@ describe('remoteObservable (port of remote_observable_ut.cpp)', () => {
     expect(itemIdx).to.be.lessThan(doneIdx)
   })
 })
+
+describe('RemoteReference', () => {
+  it('observable() dedups and starts createStream once', () => {
+    const client = new MockClient()
+    const mux = new StreamMultiplexer(client, 1, 1)
+    const registry = new RemoteRegistry(mux)
+    const ref = registry.getOrCreate(kDbStartScan, {})
+    const a = ref.observable()
+    const b = ref.observable()
+    expect(a).to.equal(b)
+    expect(a.activeCount()).to.equal(0)
+
+    const c1 = new RecordingConsumer()
+    const c2 = new RecordingConsumer()
+    const out1 = a.subscribe(c1)
+    expect(client.starts.length).to.equal(1)
+    expect(client.starts[0].handle.flags).to.equal(stream_flags.observe)
+    b.subscribe(c2)
+    expect(client.starts.length).to.equal(1)
+    expect(a.activeCount()).to.equal(2)
+
+    out1.unsubscribe()
+    expect(a.activeCount()).to.equal(1)
+  })
+
+  it('last unsubscribe cancels the stream', () => {
+    const client = new MockClient()
+    const mux = new StreamMultiplexer(client, 1, 1)
+    const registry = new RemoteRegistry(mux)
+    const ref = registry.getOrCreate(kDbStartScan, {})
+    const obs = ref.observable()
+    const out = obs.subscribe(new RecordingConsumer())
+    expect(client.starts.length).to.equal(1)
+    out.unsubscribe()
+    expect(obs.state()).to.equal(ObservableState.idle)
+    expect(client.cancels.length).to.equal(1)
+  })
+
+  it('resubscribe after idle uses maxTs', () => {
+    const client = new MockClient()
+    const mux = new StreamMultiplexer(client, 1, 1)
+    const registry = new RemoteRegistry(mux)
+    const ref = registry.getOrCreate(kDbStartScan, {})
+    const obs = ref.observable() as RemoteObservable
+    const out = obs.subscribe(new RecordingConsumer())
+    obs.onStreamItem({ stream_id: obs.streamId(), key: bin('a'), value: bin('1'), timestamp: 10 })
+    obs.onStreamDone({ stream_id: obs.streamId() })
+    out.unsubscribe()
+    obs.subscribe(new RecordingConsumer())
+    expect(client.starts.length).to.equal(2)
+    expect(BigInt(client.starts[1].handle.since_timestamp)).to.equal(10n)
+  })
+
+  it('stream() during active observe reuses the live observable', () => {
+    const client = new MockClient()
+    const mux = new StreamMultiplexer(client, 1, 1)
+    const registry = new RemoteRegistry(mux)
+    const ref = registry.getOrCreate(kDbStartScan, {})
+    const live = ref.observable()
+    live.subscribe(new RecordingConsumer())
+    expect(ref.stream()).to.equal(live)
+    expect(client.starts.length).to.equal(1)
+  })
+
+  it('stream() without observe starts a scan stream', () => {
+    const client = new MockClient()
+    const mux = new StreamMultiplexer(client, 1, 1)
+    const registry = new RemoteRegistry(mux)
+    const ref = registry.getOrCreate(kDbStartScan, {})
+    const scan = ref.stream()
+    scan.subscribe(new RecordingConsumer())
+    expect(scan).to.not.equal(ref.peekLive())
+    expect(client.starts.length).to.equal(1)
+    expect(client.starts[0].handle.flags).to.equal(stream_flags.none)
+  })
+
+  it('hold() is a no-op drop in direct mode', () => {
+    const client = new MockClient()
+    const mux = new StreamMultiplexer(client, 1, 1)
+    const registry = new RemoteRegistry(mux)
+    const ref = registry.getOrCreate(kDbStartScan, {})
+    const holder = ref.hold()
+    const obs = ref.observable()
+    const out = obs.subscribe(new RecordingConsumer())
+    out.unsubscribe()
+    expect(obs.state()).to.equal(ObservableState.idle)
+    expect(registry.getOrCreate(kDbStartScan, {})).to.equal(ref)
+    holder.dispose()
+    expect(registry.getOrCreate(kDbStartScan, {})).to.equal(ref)
+  })
+
+  it('getOrCreate dedups by functionId and args, not flags', () => {
+    const client = new MockClient()
+    const mux = new StreamMultiplexer(client, 1, 1)
+    const registry = new RemoteRegistry(mux)
+    const q = {}
+    const a = registry.getOrCreate(kDbStartScan, q)
+    const b = registry.getOrCreate(kDbStartScan, q)
+    expect(a).to.equal(b)
+    expect(registry.size()).to.equal(1)
+    expect(a).to.be.instanceOf(RemoteReference)
+  })
+})
+

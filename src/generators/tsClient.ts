@@ -156,7 +156,6 @@ function renderExtraMethod(
   member: TypeMember,
   methodId: number,
   suffix: string,
-  flagsExpr: string,
   varNameMap: Map<TypeDescription, string>
 ): string {
   const methodName = `${shortMethodName(member)}${suffix}`
@@ -165,8 +164,36 @@ function renderExtraMethod(
   const argList = renderArgList(params)
   const callArgs = argList.length > 0 ? `, ${argList}` : ''
   const lines: string[] = []
-  lines.push(`  ${methodName}(${paramList}): RemoteObservable {`)
-  lines.push(`    return this.remoteRegistry.getOrCreate(${methodId}, ${flagsExpr}${callArgs})`)
+  lines.push(`  ${methodName}(${paramList}): RemoteReference {`)
+  lines.push(`    return this.remoteRegistry.getOrCreate(${methodId}${callArgs})`)
+  lines.push('  }')
+  return lines.join('\n')
+}
+
+function isStreamHandleDispatch(first: string): string {
+  return `args.length > 0 && ${first} && typeof ${first} === 'object' && 'stream_id' in (${first} as object)`
+}
+
+function renderObservableOverloads(
+  member: TypeMember,
+  methodId: number,
+  varNameMap: Map<TypeDescription, string>
+): string {
+  const methodName = shortMethodName(member)
+  const origParams = member.type.members || []
+  const extraParams = extraMethodParams(origParams)
+  const origParamList = renderParamList(origParams, varNameMap)
+  const extraParamList = renderParamList(extraParams, varNameMap)
+  const returnType = getReturnTypeString(member.type, varNameMap)
+  const lines: string[] = []
+  lines.push(`  ${methodName}(${origParamList}): ${returnType}`)
+  lines.push(`  ${methodName}(${extraParamList}): RemoteReference`)
+  lines.push(`  ${methodName}(...args: any[]): ${returnType} | RemoteReference {`)
+  lines.push(`    const first = args[0]`)
+  lines.push(`    if (${isStreamHandleDispatch('first')}) {`)
+  lines.push(`      return this.rpcClient.call(${methodId}, ...args)`)
+  lines.push('    }')
+  lines.push(`    return this.remoteRegistry.getOrCreate(${methodId}, ...args)`)
   lines.push('  }')
   return lines.join('\n')
 }
@@ -192,7 +219,7 @@ export function generateTsClient(registry: TypeRegistry, options: TsClientGenera
 
   const lines: string[] = []
   lines.push('// Auto-generated TypeScript RPC Client')
-  lines.push(`import { SocketRpcClient, RemoteObservable, RemoteRegistry, StreamMultiplexer, stream_flags, type MessageChannel } from '${importPath}'`)
+  lines.push(`import { SocketRpcClient, RemoteReference, RemoteRegistry, StreamMultiplexer, type MessageChannel } from '${importPath}'`)
   lines.push('')
   lines.push(typesCode)
   lines.push('')
@@ -227,15 +254,16 @@ export function generateTsClient(registry: TypeRegistry, options: TsClientGenera
 
     for (const method of methods) {
       const methodId = methodIdMap.get(method.type) ?? method.type.methodId ?? -1
-      lines.push(renderOriginalMethod(method, methodId, varNameMap))
-      lines.push('')
       if (isMemberObservable(method)) {
-        lines.push(renderExtraMethod(method, methodId, '_observable', 'stream_flags.observe', varNameMap))
+        lines.push(renderObservableOverloads(method, methodId, varNameMap))
         lines.push('')
-      }
-      if (isMemberStreamable(method)) {
-        lines.push(renderExtraMethod(method, methodId, '_stream', 'stream_flags.none', varNameMap))
+      } else {
+        lines.push(renderOriginalMethod(method, methodId, varNameMap))
         lines.push('')
+        if (isMemberStreamable(method)) {
+          lines.push(renderExtraMethod(method, methodId, '_stream', varNameMap))
+          lines.push('')
+        }
       }
     }
 

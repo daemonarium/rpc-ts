@@ -25,6 +25,9 @@ export {
 } from './streamProtocol.js'
 export { StreamMultiplexer, type StreamStarter } from './streamMultiplexer.js'
 export { RemoteObservable } from './remoteObservable.js'
+export { RemoteReference } from './remoteReference.js'
+export type { Disposable, ReferenceOps } from './referenceOps.js'
+export { DirectReferenceOps } from './directReferenceOps.js'
 export { StreamRelayConsumer } from './streamRelayConsumer.js'
 export { StreamPublisher } from './streamPublisher.js'
 export {

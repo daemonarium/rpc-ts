@@ -26,6 +26,7 @@ export class Observable<EntryT extends BinaryEntry = BinaryEntry> extends Observ
   private state_: ObservableState = ObservableState.idle
   private readyPromise_: ObservablePromise = new ObservablePromise()
   private lastError_: unknown = null
+  private idleListeners: Array<() => void> = []
 
   onItem(e: EntryT): void {
     if (this.state_ === ObservableState.closed) return
@@ -188,6 +189,10 @@ export class Observable<EntryT extends BinaryEntry = BinaryEntry> extends Observ
     return this.pausedCount_
   }
 
+  addIdleListener(cb: () => void): void {
+    this.idleListeners.push(cb)
+  }
+
   kill(): void {
     if (this.state_ === ObservableState.closed) return
     const snapshot = this.outputs.slice()
@@ -215,6 +220,7 @@ export class Observable<EntryT extends BinaryEntry = BinaryEntry> extends Observ
       this.pausedCount_ = 0
       this.state_ = ObservableState.idle
       this.onStop()
+      this.notifyIdle()
     }
   }
 
@@ -238,6 +244,10 @@ export class Observable<EntryT extends BinaryEntry = BinaryEntry> extends Observ
   protected override onStop(): void {}
   protected override onPause(): void {}
   protected override onResume(): void {}
+
+  private notifyIdle(): void {
+    for (const cb of this.idleListeners) cb()
+  }
 
   private view(): Map<string, EntryT> {
     if (this.state_ === ObservableState.reloading) return this.oldData

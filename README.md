@@ -104,7 +104,9 @@ Port [`../cpp-rpc/src/observable/`](../cpp-rpc/src/observable/) w [`src/observab
 | LWW + lifecycle | [`observable.ts`](src/observable/observable.ts) | `observable.hpp` |
 | Consumer + ring + Promise backpressure | [`consumerOutput.ts`](src/observable/consumerOutput.ts), [`ringBuffer.ts`](src/observable/ringBuffer.ts) | `consumer_output.hpp`, `ring_buffer.hpp` |
 | Demux `stream_*` | [`streamMultiplexer.ts`](src/observable/streamMultiplexer.ts) | `stream_multiplexer.hpp` |
-| Wire → Observable | [`remoteObservable.ts`](src/observable/remoteObservable.ts) | `remote_observable.hpp` |
+| Wire → Observable (direct) | [`remoteObservable.ts`](src/observable/remoteObservable.ts) | `remote_observable.hpp` |
+| Handle | [`remoteReference.ts`](src/observable/remoteReference.ts) | `remote_reference.hpp` |
+| Direct vs gateway ops | [`referenceOps.ts`](src/observable/referenceOps.ts), [`directReferenceOps.ts`](src/observable/directReferenceOps.ts) | `ReferenceOps` / `DirectReferenceOps` |
 | Observable → wire | [`streamPublisher.ts`](src/observable/streamPublisher.ts), [`streamRelayConsumer.ts`](src/observable/streamRelayConsumer.ts) | `stream_publisher.hpp`, `stream_relay_consumer.hpp` |
 | Cache po `(function_id, args)` | [`remoteRegistry.ts`](src/observable/remoteRegistry.ts) | `remote_registry.hpp` |
 
@@ -112,7 +114,7 @@ Backpressure: `onChange` zwraca `ObservablePromise` (resolved = sync, pending = 
 
 Adapter kernelowy (opcjonalny): [`../ts-kernel/src/KernelStreamEndpoint.ts`](../ts-kernel/src/KernelStreamEndpoint.ts) — para `(pid, socket)` jako `MessageChannel`. Rdzeń w `ts-rpc` działa bez kernela (`MockChannel` w testach).
 
-Generator **TS Client** używa `RemoteRegistry.getOrCreate` w metodach `*_observable` / `*_stream` (patrz niżej) — ten sam cache `(function_id, args)` i delta resume.
+Generator **TS Client** używa `RemoteRegistry.getOrCreate` — zwraca `RemoteReference`. Live: `ref.observable()`, skan: `ref.stream()`.
 
 ---
 
@@ -122,10 +124,10 @@ Generator **TS Client** używa `RemoteRegistry.getOrCreate` w metodach `*_observ
 
 C++ annotacje member-level w [`../cpp-rpc/src/serialization/annotations.hpp`](../cpp-rpc/src/serialization/annotations.hpp):
 
-- `[[=serialization::observable()]]` — live strumień (tail-and-catch). Generator dodaje `<method>_observable`.
-- `[[=serialization::streamable()]]` — skończony strumień. Generator dodaje `<method>_stream`.
+- `[[=serialization::observable()]]` — live strumień (tail-and-catch). Generator dodaje overload bez `stream_handle` zwracający `RemoteReference` (ta sama nazwa, np. `table(...)`).
+- `[[=serialization::streamable()]]` — skończony strumień, nie obserwowalny. Generator dodaje `<method>_stream` zwracające `RemoteReference`.
 
-Oryginalna metoda RPC zostaje (pierwszy parametr `stream_handle` zostaje jawny). Extra metoda pomija `stream_handle` i zwraca `RemoteObservable`. **Oba** dostają `stream_done`. Różnica: po `stream_done` observable zostaje w `ready` i przyjmuje dalsze `stream_item` (live); streamable na tym kończy. `stream_done` = koniec snapshota / catch-up (`loading → ready`), nie zamknięcie obserwacji.
+Oryginalna metoda RPC zostaje (pierwszy parametr `stream_handle` zostaje jawny). Extra pomija `stream_handle` i zwraca `RemoteReference`. `observable()` startuje `flags=observe`; `stream()` — `flags=none` (kończy się `stream_done`) albo reuse live gdy `activeCount() > 0`. `stream_done` = koniec snapshota / catch-up (`loading → ready`), nie zamknięcie obserwacji.
 
 Wygenerowany konstruktor:
 
@@ -141,13 +143,14 @@ constructor(
 
 `streamChannel` opcjonalny: mux wtedy startuje RPC na `rpcClient`, a `stream_*` czyta z osobnego kanału. Bez niego Starter = Channel (jeden socket).
 
-Przykład — `table_watch` w [`../observable-db/src/structures/observable_db.hpp`](../observable-db/src/structures/observable_db.hpp):
+Przykład — `table` w [`../observable-db/src/structures/observable_db.hpp`](../observable-db/src/structures/observable_db.hpp):
 
 ```ts
 attachStreamMessages(scanClient)
 const client = new ObservableDbClient(driver, tsPid, 1, scanClient)
-await client.table_watch(streamHandle, tableId, lower, lowerMode, upper, upperMode)
-const watch = client.table_watch_observable(tableId, lower, lowerMode, upper, upperMode)
+const ref = client.table(tableId, lower, lowerMode, upper, upperMode, 0n, false, false)
+const watch = ref.observable()
+const scan = ref.stream()
 watch.subscribe(consumer)
 ```
 

@@ -125,6 +125,9 @@ export {
 } from './observable/streamProtocol.js'
 export { StreamMultiplexer, type StreamStarter } from './observable/streamMultiplexer.js'
 export { RemoteObservable } from './observable/remoteObservable.js'
+export { RemoteReference } from './observable/remoteReference.js'
+export type { Disposable, ReferenceOps } from './observable/referenceOps.js'
+export { DirectReferenceOps } from './observable/directReferenceOps.js'
 export { StreamRelayConsumer } from './observable/streamRelayConsumer.js'
 export { StreamPublisher } from './observable/streamPublisher.js'
 export {

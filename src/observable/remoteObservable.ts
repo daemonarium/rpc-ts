@@ -13,7 +13,7 @@ import type { StreamMultiplexer, StreamStarter } from './streamMultiplexer.js'
 import type { StreamReceiver } from './streamReceiver.js'
 import { stream_flags } from './streamProtocol.js'
 import { DbIoError, toTs, type BinaryEntry } from './types.js'
-import type { StreamDone, StreamError, StreamItem, StreamOpened, StreamReset } from './streamProtocol.js'
+import type { StreamDone, StreamError, StreamItem, StreamKey, StreamOpened, StreamReset } from './streamProtocol.js'
 
 export class RemoteObservable<
   Starter extends StreamStarter = StreamStarter,
@@ -52,6 +52,14 @@ export class RemoteObservable<
     this.onItem({
       key: m.key,
       value: m.value,
+      ts: toTs(m.timestamp),
+    })
+  }
+
+  onStreamKey(m: StreamKey): void {
+    this.onItem({
+      key: m.key,
+      value: new Uint8Array([0]),
       ts: toTs(m.timestamp),
     })
   }
