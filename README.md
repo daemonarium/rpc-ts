@@ -129,6 +129,12 @@ C++ annotacje member-level w [`../cpp-rpc/src/serialization/annotations.hpp`](..
 
 Oryginalna metoda RPC zostaje (pierwszy parametr `stream_handle` zostaje jawny). Extra pomija `stream_handle` i zwraca `RemoteReference`. `observable()` startuje `flags=observe`; `stream()` — `flags=none` (kończy się `stream_done`) albo reuse live gdy `activeCount() > 0`. `stream_done` = koniec snapshota / catch-up (`loading → ready`), nie zamknięcie obserwacji.
 
+Server-side flavor is transparent to the client: a high-level method
+that returns `shared_ptr<Observable<BinaryEntry>>` (no `stream_handle`
+in C++) is still published as `stream_handle` first + void return.
+The generated `RemoteReference` overload is the same as for low-level
+methods that take `stream_handle` themselves.
+
 Wygenerowany konstruktor:
 
 ```ts
