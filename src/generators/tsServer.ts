@@ -24,7 +24,8 @@ function getReturnTypeString(type: TypeDescription, varNameMap: Map<TypeDescript
   return `Promise<${getTypeString(type.item, varNameMap)}>`
 }
 
-function getTypeString(type: TypeDescription, varNameMap: Map<TypeDescription, string>): string {
+function getTypeString(type: TypeDescription | null | undefined, varNameMap: Map<TypeDescription, string>): string {
+  if (!type) return 'any'
   switch (type.kind) {
     case TypeKind.Void:
       return 'void'
@@ -61,10 +62,8 @@ function getTypeString(type: TypeDescription, varNameMap: Map<TypeDescription, s
       }
       return type.name || 'any'
     case TypeKind.Pointer:
-      if (type.item) {
-        return `${getTypeString(type.item, varNameMap)} | null`
-      }
-      return 'any | null'
+      if (!type.item) return 'any | null'
+      return `${getTypeString(type.item, varNameMap)} | null`
     case TypeKind.Map:
       if (type.key && type.item) {
         return `Map<${getTypeString(type.key, varNameMap)}, ${getTypeString(type.item, varNameMap)}>`

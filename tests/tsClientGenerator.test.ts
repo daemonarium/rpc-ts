@@ -37,6 +37,7 @@ function buildClientRegistry(): TypeRegistry {
       { name: 'socket', type: uint32, annotations: [] },
       { name: 'stream_id', type: uint64, annotations: [] },
       { name: 'since_timestamp', type: uint64, annotations: [] },
+      { name: 'flags', type: uint8, annotations: [] },
     ],
   })
 
@@ -143,12 +144,12 @@ describe('TS Client generator', () => {
 
   it('emits RemoteRegistry.getOrCreate with the method id and remaining args', () => {
     const code = generateTsClient(buildClientRegistry())
-    expect(code).to.include('import { SocketRpcClient, RemoteObservable, RemoteRegistry, StreamMultiplexer, type MessageChannel } from \'@wa-os/ts-rpc\'')
+    expect(code).to.include('import { SocketRpcClient, RemoteObservable, RemoteRegistry, StreamMultiplexer, stream_flags, type MessageChannel } from \'@wa-os/ts-rpc\'')
     expect(code).to.include('streamChannel?: MessageChannel')
     expect(code).to.include('new StreamMultiplexer(rpcClient, streamChannel, returnPid, returnSocket)')
     expect(code).to.include('this.rpcClient.call(')
-    expect(code).to.match(/table_watch_observable\([\s\S]*?return this\.remoteRegistry\.getOrCreate\(1, table_id, lower_id\)/)
-    expect(code).to.match(/table_scan_stream\([\s\S]*?return this\.remoteRegistry\.getOrCreate\(2, table_id, limit\)/)
+    expect(code).to.match(/table_watch_observable\([\s\S]*?return this\.remoteRegistry\.getOrCreate\(1, stream_flags.observe, table_id, lower_id\)/)
+    expect(code).to.match(/table_scan_stream\([\s\S]*?return this\.remoteRegistry\.getOrCreate\(2, stream_flags.none, table_id, limit\)/)
   })
 
   it('accepts a custom import path', () => {

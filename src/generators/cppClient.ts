@@ -16,7 +16,7 @@ export function generateCppGlueCode(registry: TypeRegistry, options: GeneratorOp
     .map(type => ({
       type,
       methods: (type.members || []).filter(member =>
-        member.type.kind === TypeKind.Method || member.type.kind === TypeKind.Function
+        member.type?.kind === TypeKind.Method || member.type?.kind === TypeKind.Function
       )
     }))
     .filter(entry => entry.methods.length > 0)
@@ -70,7 +70,7 @@ export function generateCppGlueCode(registry: TypeRegistry, options: GeneratorOp
       
       const paramStrings: string[] = []
       for (const param of params) {
-        const paramType = getCppType(param.type)
+        const paramType = param.type ? getCppType(param.type) : 'void*'
         paramStrings.push(`${paramType} ${param.name}`)
       }
       code += paramStrings.join(', ')
@@ -103,7 +103,7 @@ function buildMethodIdMap(registry: TypeRegistry): Map<TypeDescription, number> 
   for (const type of registry.getTypes()) {
     if (type.kind !== TypeKind.Object && type.kind !== TypeKind.DynamicObject && type.kind !== TypeKind.Message) continue
     for (const member of type.members || []) {
-      if (member.type.kind === TypeKind.Method || member.type.kind === TypeKind.Function) {
+      if (member.type?.kind === TypeKind.Method || member.type?.kind === TypeKind.Function) {
         map.set(member.type, member.type.methodId ?? id)
         id++
       }

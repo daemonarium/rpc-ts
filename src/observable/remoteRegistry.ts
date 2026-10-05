@@ -8,6 +8,7 @@
 
 import type { MessageChannel } from '../MessageChannel.js'
 import { RemoteObservable } from './remoteObservable.js'
+import { stream_flags } from './streamProtocol.js'
 import type { StreamMultiplexer, StreamStarter } from './streamMultiplexer.js'
 
 export interface ObservationKey {
@@ -53,6 +54,7 @@ export class RemoteRegistry<
 
   getOrCreate(
     functionId: bigint | number,
+    flags: number = stream_flags.none,
     ...args: unknown[]
   ): RemoteObservable<Starter, Channel> {
     const fid = typeof functionId === 'bigint' ? functionId : BigInt(functionId)
@@ -65,7 +67,7 @@ export class RemoteRegistry<
         return e.obs
       }
     }
-    const obs = new RemoteObservable<Starter, Channel>(this.mux, fid, ...args)
+    const obs = new RemoteObservable<Starter, Channel>(this.mux, fid, flags, ...args)
     this.entries.push({ key, obs })
     return obs
   }

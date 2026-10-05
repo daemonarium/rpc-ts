@@ -121,6 +121,7 @@ export {
   type StreamError,
   type StreamCancel,
   STREAM_MESSAGE_TYPES,
+  stream_flags,
 } from './observable/streamProtocol.js'
 export { StreamMultiplexer, type StreamStarter } from './observable/streamMultiplexer.js'
 export { RemoteObservable } from './observable/remoteObservable.js'

@@ -72,6 +72,7 @@ export class StreamMultiplexer<
     functionId: bigint | number,
     sinceTs: bigint | number,
     receiver: StreamReceiver | null,
+    flags: number = 0,
     ...args: unknown[]
   ): bigint {
     const id = this.nextId
@@ -81,6 +82,7 @@ export class StreamMultiplexer<
       socket: this.returnSocket_,
       stream_id: id,
       since_timestamp: sinceTs,
+      flags,
     }
     if (receiver) this.receivers.set(id, receiver)
     try {

@@ -11,6 +11,7 @@ import type { MessageChannel } from '../MessageChannel.js'
 import { Observable } from './observable.js'
 import type { StreamMultiplexer, StreamStarter } from './streamMultiplexer.js'
 import type { StreamReceiver } from './streamReceiver.js'
+import { stream_flags } from './streamProtocol.js'
 import { DbIoError, toTs, type BinaryEntry } from './types.js'
 import type { StreamDone, StreamError, StreamItem, StreamOpened, StreamReset } from './streamProtocol.js'
 
@@ -20,17 +21,20 @@ export class RemoteObservable<
 > extends Observable<BinaryEntry> implements StreamReceiver {
   private readonly mux: StreamMultiplexer<Starter, Channel>
   private readonly functionId_: bigint
+  private readonly flags_: number
   private readonly args_: unknown[]
   private streamId_ = 0n
 
   constructor(
     mux: StreamMultiplexer<Starter, Channel>,
     functionId: bigint | number,
+    flags: number = stream_flags.none,
     ...args: unknown[]
   ) {
     super()
     this.mux = mux
     this.functionId_ = typeof functionId === 'bigint' ? functionId : BigInt(functionId)
+    this.flags_ = flags
     this.args_ = args
   }
 
@@ -65,7 +69,7 @@ export class RemoteObservable<
   }
 
   protected override onStart(): void {
-    this.streamId_ = this.mux.createStream(this.functionId_, this.maxTs(), this, ...this.args_)
+    this.streamId_ = this.mux.createStream(this.functionId_, this.maxTs(), this, this.flags_, ...this.args_)
   }
 
   protected override onStop(): void {

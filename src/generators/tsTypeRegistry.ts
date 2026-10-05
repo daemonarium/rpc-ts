@@ -297,6 +297,14 @@ export function generateTypeRegistryCode(
     if (type.members && type.members.length > 0) {
       lines.push(`  ${varName}.members = [`)
       for (const m of type.members) {
+        if (!m.type) {
+          lines.push('    {')
+          lines.push(`      name: ${JSON.stringify(m.name)},`)
+          lines.push('      type: null as unknown as TypeDescription,')
+          lines.push('      annotations: [],')
+          lines.push('    },')
+          continue
+        }
         const memberVarName = varNameMap.get(m.type)
         if (memberVarName) {
           lines.push('    {')

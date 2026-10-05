@@ -162,6 +162,7 @@ function createScanRegistry(onStart: (stream: StreamHandle, query: unknown) => v
   const voidType = t('void')
   const uint32 = t('uint32')
   const uint64 = t('uint64')
+  const uint8 = t('uint8')
   const binary = t('binary')
   const stringType = t('string')
 
@@ -173,6 +174,7 @@ function createScanRegistry(onStart: (stream: StreamHandle, query: unknown) => v
       { name: 'socket', type: uint32, annotations: [] },
       { name: 'stream_id', type: uint64, annotations: [] },
       { name: 'since_timestamp', type: uint64, annotations: [] },
+      { name: 'flags', type: uint8, annotations: [] },
     ],
   })
   const scanQuery = TypeDescription.create({
@@ -288,7 +290,7 @@ describe('remoteObservable (port of remote_observable_ut.cpp)', () => {
   it('1 subscribe triggers onStart createStream once', () => {
     const client = new MockClient()
     const mux = new StreamMultiplexer(client, 1, 2)
-    const obs = new RemoteObservable(mux, kDbStartScan, {})
+    const obs = new RemoteObservable(mux, kDbStartScan, 0, {})
     const c = new RecordingConsumer()
     expect(obs.state()).to.equal(ObservableState.idle)
     obs.subscribe(c)
@@ -297,6 +299,7 @@ describe('remoteObservable (port of remote_observable_ut.cpp)', () => {
     expect(BigInt(client.starts[0].handle.pid)).to.equal(1n)
     expect(client.starts[0].handle.socket).to.equal(2)
     expect(BigInt(client.starts[0].handle.since_timestamp)).to.equal(0n)
+    expect(client.starts[0].handle.flags).to.equal(0)
     expect(obs.streamId()).to.equal(1n)
     expect(obs.state()).to.equal(ObservableState.loading)
   })
@@ -304,7 +307,7 @@ describe('remoteObservable (port of remote_observable_ut.cpp)', () => {
   it('2 onStreamItem drives onItem then onStreamDone to ready', () => {
     const client = new MockClient()
     const mux = new StreamMultiplexer(client, 1, 2)
-    const obs = new RemoteObservable(mux, kDbStartScan, {})
+    const obs = new RemoteObservable(mux, kDbStartScan, 0, {})
     const c = new RecordingConsumer()
     obs.subscribe(c)
     obs.onStreamItem({ stream_id: obs.streamId(), key: bin('a'), value: bin('1'), timestamp: 10 })
@@ -321,7 +324,7 @@ describe('remoteObservable (port of remote_observable_ut.cpp)', () => {
   it('3 onStreamReset clear-and-rebuild sets-only replay', () => {
     const client = new MockClient()
     const mux = new StreamMultiplexer(client, 1, 2)
-    const obs = new RemoteObservable(mux, kDbStartScan, {})
+    const obs = new RemoteObservable(mux, kDbStartScan, 0, {})
     const c = new RecordingConsumer()
     obs.subscribe(c)
     obs.onStreamItem({ stream_id: obs.streamId(), key: bin('a'), value: bin('1'), timestamp: 1 })
@@ -344,7 +347,7 @@ describe('remoteObservable (port of remote_observable_ut.cpp)', () => {
   it('4 onStreamError to error lastError retained', () => {
     const client = new MockClient()
     const mux = new StreamMultiplexer(client, 1, 2)
-    const obs = new RemoteObservable(mux, kDbStartScan, {})
+    const obs = new RemoteObservable(mux, kDbStartScan, 0, {})
     const c = new RecordingConsumer()
     obs.subscribe(c)
     obs.onStreamItem({ stream_id: obs.streamId(), key: bin('a'), value: bin('1'), timestamp: 1 })
@@ -362,7 +365,7 @@ describe('remoteObservable (port of remote_observable_ut.cpp)', () => {
   it('5 last unsubscribe onStop cancelStream idle', () => {
     const client = new MockClient()
     const mux = new StreamMultiplexer(client, 1, 2)
-    const obs = new RemoteObservable(mux, kDbStartScan, {})
+    const obs = new RemoteObservable(mux, kDbStartScan, 0, {})
     const c = new RecordingConsumer()
     const out = obs.subscribe(c)
     expect(client.starts.length).to.equal(1)
@@ -377,7 +380,7 @@ describe('remoteObservable (port of remote_observable_ut.cpp)', () => {
   it('6 resubscribe after idle since_timestamp is maxTs', () => {
     const client = new MockClient()
     const mux = new StreamMultiplexer(client, 1, 2)
-    const obs = new RemoteObservable(mux, kDbStartScan, {})
+    const obs = new RemoteObservable(mux, kDbStartScan, 0, {})
     const c = new RecordingConsumer()
     const out = obs.subscribe(c)
     obs.onStreamItem({ stream_id: obs.streamId(), key: bin('a'), value: bin('1'), timestamp: 10 })
@@ -394,7 +397,7 @@ describe('remoteObservable (port of remote_observable_ut.cpp)', () => {
   it('7 onStreamReset after error is reloading', () => {
     const client = new MockClient()
     const mux = new StreamMultiplexer(client, 1, 2)
-    const obs = new RemoteObservable(mux, kDbStartScan, {})
+    const obs = new RemoteObservable(mux, kDbStartScan, 0, {})
     const c = new RecordingConsumer()
     obs.subscribe(c)
     obs.onStreamError({ stream_id: obs.streamId(), message: 'fail' })
@@ -431,7 +434,7 @@ describe('remoteObservable (port of remote_observable_ut.cpp)', () => {
     })
 
     const mux = new StreamMultiplexer(client, 1, 1)
-    const obs = new RemoteObservable(mux, kDbStartScan, { limit: 0n })
+    const obs = new RemoteObservable(mux, kDbStartScan, 0, { limit: 0n })
     const c = new RecordingConsumer()
     const out = obs.subscribe(c)
     expect(obs.state()).to.equal(ObservableState.loading)
@@ -484,12 +487,12 @@ describe('remoteObservable (port of remote_observable_ut.cpp)', () => {
     const mux = new StreamMultiplexer(client, 1, 1)
     const registry = new RemoteRegistry(mux)
     const q = {}
-    const a = registry.getOrCreate(kDbStartScan, q)
-    const b = registry.getOrCreate(kDbStartScan, q)
+    const a = registry.getOrCreate(kDbStartScan, 0, q)
+    const b = registry.getOrCreate(kDbStartScan, 0, q)
     expect(a).to.equal(b)
 
     const other = { limit: 10 }
-    const d = registry.getOrCreate(kDbStartScan, other)
+    const d = registry.getOrCreate(kDbStartScan, 0, other)
     expect(a).to.not.equal(d)
     expect(registry.size()).to.equal(2)
 
@@ -506,7 +509,7 @@ describe('remoteObservable (port of remote_observable_ut.cpp)', () => {
     a.subscribe(c2)
     expect(client.starts.length).to.equal(2)
     expect(BigInt(client.starts[1].handle.since_timestamp)).to.equal(10n)
-    expect(a).to.equal(registry.getOrCreate(kDbStartScan, q))
+    expect(a).to.equal(registry.getOrCreate(kDbStartScan, 0, q))
   })
 
   it('MockChannel tryQueueMessage false holds item ahead of control', () => {

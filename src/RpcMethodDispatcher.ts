@@ -116,15 +116,17 @@ export class RpcMethodDispatcher {
     reader: Reader,
     parameterTypes: TypeDescription[]
   ): unknown {
-    const args: any[] = []
+    // Pointer arguments are assigned during readRest, after the headers.
+    // Hold slots so the handler sees the filled values, not the pre-rest snapshot.
+    const slots: Array<{ value: unknown }> = []
     for (const paramType of parameterTypes) {
-      let argValue: any
+      const slot = { value: undefined as unknown }
       deserializeValueByType(reader, this.typeRegistry, paramType, (value) => {
-        argValue = value
+        slot.value = value
       })
-      args.push(argValue)
+      slots.push(slot)
     }
     reader.readRest()
-    return handler(...args)
+    return handler(...slots.map((slot) => slot.value))
   }
 }

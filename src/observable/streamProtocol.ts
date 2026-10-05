@@ -8,7 +8,14 @@ export interface StreamHandle {
   socket: number
   stream_id: bigint | number
   since_timestamp: bigint | number
+  flags: number
 }
+
+/** Lifecycle bits on StreamHandle.flags. Orthogonal to since_timestamp. */
+export const stream_flags = {
+  none: 0,
+  observe: 1,
+} as const
 
 export interface StreamOpened {
   stream_id: bigint | number
