@@ -52,7 +52,8 @@ function getTypeString(type: TypeDescription, varNameMap: Map<TypeDescription, s
       return 'Uint8Array'
     case TypeKind.Array:
       if (type.item) {
-        return `${getTypeString(type.item, varNameMap)}[]`
+        const itemType = getTypeString(type.item, varNameMap)
+        return itemType.includes('|') ? `(${itemType})[]` : `${itemType}[]`
       }
       return 'any[]'
     case TypeKind.Object:

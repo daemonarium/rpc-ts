@@ -162,7 +162,7 @@ function getTypeScriptTypeForMember(type: TypeDescription, varNameMap: Map<TypeD
     case TypeKind.Array:
       if (type.item) {
         const itemType = getTypeScriptTypeForMember(type.item, varNameMap)
-        return `${itemType}[]`
+        return itemType.includes('|') ? `(${itemType})[]` : `${itemType}[]`
       }
       return 'any[]'
     case TypeKind.Pointer:
