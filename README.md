@@ -1,5 +1,8 @@
 # rpc
 
+Wire specification: [daemonarium/rpc-protocol v0.1.0](https://github.com/daemonarium/rpc-protocol/tree/v0.1.0).
+
+
 TypeScript serialization and RPC over a socket message channel. The wire format matches [daemonarium/rpc-cpp](https://github.com/daemonarium/rpc-cpp). Three binary formats share one `IWriter` / `IReader` contract: flat (default), compressed (legacy), and key (database keys). An observable stream multiplexer carries live and scan streams.
 
 The npm package is `@daemonarium/rpc`. This repository is `daemonarium/rpc-ts`.

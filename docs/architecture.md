@@ -1,5 +1,8 @@
 # ts-rpc
 
+Wire specification: [daemonarium/rpc-protocol v0.1.0](https://github.com/daemonarium/rpc-protocol/tree/v0.1.0). This file is the implementation's view.
+
+
 Biblioteka TypeScript łącząca:
 
 1. **serializację / deserializację** wartości według `TypeRegistry` (codecs + `valueSerialization`),
