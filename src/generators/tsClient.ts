@@ -200,7 +200,7 @@ function renderObservableOverloads(
 }
 
 export function generateTsClient(registry: TypeRegistry, options: TsClientGeneratorOptions = {}): string {
-  const importPath = options.importPath || '@wa-os/ts-rpc'
+  const importPath = options.importPath || '@daemonarium/rpc'
   const objectTypes = registry.getTypes().filter((type) =>
     type.kind === TypeKind.Object || type.kind === TypeKind.DynamicObject || type.kind === TypeKind.Message
   )

@@ -142,7 +142,7 @@ describe('TS Client generator', () => {
 
   it('emits RemoteRegistry.getOrCreate with the method id and remaining args', () => {
     const code = generateTsClient(buildClientRegistry())
-    expect(code).to.include('import { SocketRpcClient, RemoteReference, RemoteRegistry, StreamMultiplexer, type MessageChannel } from \'@wa-os/ts-rpc\'')
+    expect(code).to.include('import { SocketRpcClient, RemoteReference, RemoteRegistry, StreamMultiplexer, type MessageChannel } from \'@daemonarium/rpc\'')
     expect(code).to.include('streamChannel?: MessageChannel')
     expect(code).to.include('new StreamMultiplexer(rpcClient, streamChannel, returnPid, returnSocket)')
     expect(code).to.include('this.rpcClient.call(')

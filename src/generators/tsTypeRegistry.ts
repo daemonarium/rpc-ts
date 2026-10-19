@@ -336,7 +336,7 @@ export function generateTsTypeRegistry(registry: TypeRegistry, options: TsRegist
   
   const lines: string[] = []
   lines.push('// Auto-generated TypeScript TypeRegistry builder')
-  lines.push("import { TypeRegistry, TypeDescription, TypeKind } from '@wa-os/ts-rpc'")
+  lines.push("import { TypeRegistry, TypeDescription, TypeKind } from '@daemonarium/rpc'")
   lines.push('')
   lines.push(result.typesCode)
   lines.push('')

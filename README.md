@@ -1,191 +1,62 @@
-# ts-rpc
+# rpc
 
-Biblioteka TypeScript łącząca:
+TypeScript serialization and RPC over a socket message channel. The wire format matches [daemonarium/rpc-cpp](https://github.com/daemonarium/rpc-cpp). Three binary formats share one `IWriter` / `IReader` contract: flat (default), compressed (legacy), and key (database keys). An observable stream multiplexer carries live and scan streams.
 
-1. **serializację / deserializację** wartości według `TypeRegistry` (codecs + `valueSerialization`),
-2. **RPC** i kanał wiadomości na sockecie (TS ↔ WASM / C++ `cpp-rpc`).
+The npm package is `@daemonarium/rpc`. This repository is `daemonarium/rpc-ts`.
 
-Warstwa typów (`serializeValueByType` / `deserializeValueByType`) nie zna formatu ani medium — woła wspólny kontrakt **`IWriter` / `IReader`**. Konkretny backend (compressed / flat / key) implementuje ten kontrakt.
-
----
-
-## Formaty binarne
-
-| | Compressed | Flat | Key |
-|--|------------|------|-----|
-| Status | legacy opt-in | **domyślny** (serializacja + message channel + RPC) — [flat-todo.md](flat-todo.md) | serializacja (+ circular), bez RPC — [key-todo.md](key-todo.md) |
-| Liczby | varint / sortowalny float | fixed LE (jak C++) | jak compressed, w regionie **data** |
-| Mapy | interleaved (`length` + pary) | SoA | throw |
-| Ramki | `beginFrame` / `endFrame` / `saveOffset` = no-op | trailery checkpointów | no-op |
-| Layout | strumień | strumień + trailery | `[data][meta][u8 meta_size]` |
-| Odczyt | zawsze materialized | zawsze materialized (brak `flat_view` w TS) | materialized |
-
-Specyfikacja wire flat: [../cpp-rpc/flat-format.md](../cpp-rpc/flat-format.md). Spec key: [../cpp-rpc/key-format.md](../cpp-rpc/key-format.md). Compressed / flat / key **nie są** kompatybilne bajtowo — nie mieszać na jednym sockecie.
-
-Blob `TypeRegistry` / `rpc_description`: `[envelope u8][compressed body]` — `TypeRegistry.dataFormat` / `SerializationFormat` (`Compressed` | `Flat` | `Key`). Body registry zawsze compressed. Spec: [../cpp-rpc/type-registry-blob.md](../cpp-rpc/type-registry-blob.md).
-
----
-
-## Goldeny vs cpp-rpc
-
-Checked-in TSV (źródło prawdy = C++ generators w `cmake-build-debug/tests/` lub lokalnym `build/tests/`):
-
-| Plik | Zawartość |
-|------|-----------|
-| [`tests/serialization_reference.tsv`](tests/serialization_reference.tsv) | skalarne compressed |
-| [`tests/serialization_flat_reference.tsv`](tests/serialization_flat_reference.tsv) | skalarne flat LE |
-| [`tests/serialization_complex_reference.tsv`](tests/serialization_complex_reference.tsv) | Person value/graph compressed+flat |
-
-Regeneracja (wymaga reflection clang build; preferuj `cmake-build-debug`, albo `build/` jeśli tak masz skonfigurowane):
-
-```bash
-cmake --build cmake-build-debug --target generate_serialization_tsv generate_serialization_complex_tsv
-./cmake-build-debug/tests/generate_serialization_tsv ts-rpc/tests/serialization_reference.tsv
-./cmake-build-debug/tests/generate_serialization_tsv --flat ts-rpc/tests/serialization_flat_reference.tsv
-./cmake-build-debug/tests/generate_serialization_complex_tsv ts-rpc/tests/serialization_complex_reference.tsv
-```
-
-Fixture Person: wspólny Rng w [`cpp-rpc/src/test/person_fixture.hpp`](../cpp-rpc/src/test/person_fixture.hpp) + port [`tests/personFixture.ts`](tests/personFixture.ts).
-
----
-
-## Architektura
+## Install
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  SocketRpc* / SocketMessageChannel / FlatSocketMessage… │
-└────────────────────────────┬────────────────────────────┘
-                             │ codecs + valueSerialization
-┌────────────────────────────▼────────────────────────────┐
-│  IWriter / IReader  (writerTypes.ts)                    │
-└────────────────────────────┬────────────────────────────┘
-         ┌───────────────────┼───────────────────┬──────────────────┐
-         ▼                   ▼                   ▼                  ▼
-   Writer / Reader   LocalCircularBuffer*   FlatWriter / …    KeyWriter / KeyReader /
-   (ArrayBuffer)     (socket buffers)       FlatLocalCircular* KeyLocalCircular*
+npm i @daemonarium/rpc
 ```
 
-### Kontrakt `IWriter` / `IReader`
+Wasm modules built with `daemonarium/rpc-cpp` speak the same bytes.
 
-Obowiązkowe metody (używane przez `valueSerialization` i codecs):
+## One import
 
-- skalary: `writeU64`…`writeBool` / `readU64`…`readBool`
-- `writeString` / `writeBinary` / `writeLength` (+ read)
-- ramki: writer `beginFrame` / `endFrame` / `saveOffset`; reader `enterFrame` / `exitFrame` / `saveOffset`
-- graf: `writePointer` / `writeRest` / `readPointer` / `readRest`
-- `writeTyped` / `readTyped`
-- **`writeMap` / `readMap`** — layout zależy od backendu:
-  - compressed: `writeLength(n)` + interleaved key/value callbacks (jak C++ `stream_writer::write_map`)
-  - flat: SoA wg `flat-format.md` (`FlatWriter` / `FlatReader` / circular)
-  - key: throw (map/pointer/typed nieobsługiwane)
+```ts
+import {
+  SocketRpcServer,
+  SocketRpcClient,
+  TypeRegistry,
+  FlatWriter,
+  FlatReader,
+} from '@daemonarium/rpc'
+```
 
-`ModuleCircularBufferWriter` / `Reader` to niskopoziomowe poke/peek (nie pełny kontrakt) — używane do surowego I/O, nie przez `valueSerialization`.
+## Codegen
 
----
+`rpc-codegen` reads a wasm module's `rpc_description` and emits a typed client.
 
-## Message / RPC
+```
+npx rpc-codegen module.wasm -l "TS Client" -s 0
+```
 
-- [`SocketMessageChannel`](src/SocketMessageChannel.ts) — compressed: `[len 4B LE][type u64 varint][body][writeRest][payload]`. Przyjmuje `Socket` (process-side: `SocketMessageChannelSocket`) — nie tylko `LocalSocket`.
-- [`FlatSocketMessageChannel`](src/FlatSocketMessageChannel.ts) — flat: `[len][type u32 LE][encoded_size_0][root][writeRest…][sentinel 0][payload]` (wspólne framing: [`socketMessageFraming.ts`](src/socketMessageFraming.ts))
-- [`LocalCircularBufferWriter`](src/LocalCircularBufferWriter.ts) / [`FlatLocalCircularBufferWriter`](src/flatLocalCircularBufferWriter.ts) — dowolny [`CircularBuffer`](src/CircularBuffer.ts); `grow` opcjonalne. Bez grow i pełny bufor → throw.
-- [`SocketRpcServer`](src/SocketRpcServer.ts) / [`SocketRpcClient`](src/SocketRpcClient.ts) — ctor: `socket: Socket`; domyślnie flat; compressed opt-in: `new SocketRpcServer(socket, registry, codecs, { format: 'compressed' })`
-- Nazwa [`SocketMessageChannel`](src/SocketMessageChannel.ts) = ścieżka **compressed**; flat = `FlatSocketMessageChannel`
-- C++ opt-in compressed USER: `WAOS_MODULE_RPC_COMPRESSED` ([`module.hpp`](../cpp-rpc/src/utils/module.hpp))
-- [`MessageChannel`](src/MessageChannel.ts) — węższy interfejs (`registerMessageType` / `onMessage` / `sendMessage` / `tryQueueMessage` / `isWritable` / `onWritable`). `tryQueueMessage` zwraca `false` gdy kanał pełen (C++ `try_queue_message`, bez flusha). [`SocketMessageChannelBase`](src/socketMessageFraming.ts) implementuje go; [`SocketRpcClient`](src/SocketRpcClient.ts) to pass-through — jeden obiekt spełnia **Starter + Channel**.
+Languages: `C++ Types`, `C++ Client`, `C++ Server`, `TS Type Registry`, `TS Server`, `TS Client`.
 
----
+## Formats
+
+The byte layouts live with the C++ library:
+
+- [Flat](https://github.com/daemonarium/rpc-cpp/blob/main/docs/flat-format.md)
+- [Compressed](https://github.com/daemonarium/rpc-cpp/blob/main/docs/compressed-format.md)
+- [Key](https://github.com/daemonarium/rpc-cpp/blob/main/docs/key-format.md)
+- [Type registry blob](https://github.com/daemonarium/rpc-cpp/blob/main/docs/type-registry-blob.md)
+
+Flat, compressed, and key are not byte-compatible. Do not mix them on one socket.
 
 ## Observable
 
-Port [`../cpp-rpc/src/observable/`](../cpp-rpc/src/observable/) w [`src/observable/`](src/observable/). Kernel-independent: transport to dowolny `MessageChannel` (LocalSocket, później WS / SockJS). „Remote” = across a message channel, nie „across the network”.
+`RemoteReference.observable()` is a live stream. `stream(since)` reuses the live stream when one is already active, otherwise it scans from `since`. `fetch(since)` always starts a new scan. A full channel returns `false` from `tryQueueMessage` and resumes on `onWritable`. The map of writers, readers, and the multiplexer is in [docs/architecture.md](docs/architecture.md).
 
-| Warstwa | Plik | C++ |
-|---------|------|-----|
-| LWW + lifecycle | [`observable.ts`](src/observable/observable.ts) | `observable.hpp` |
-| Consumer + ring + Promise backpressure | [`consumerOutput.ts`](src/observable/consumerOutput.ts), [`ringBuffer.ts`](src/observable/ringBuffer.ts) | `consumer_output.hpp`, `ring_buffer.hpp` |
-| Demux `stream_*` | [`streamMultiplexer.ts`](src/observable/streamMultiplexer.ts) | `stream_multiplexer.hpp` |
-| Wire → Observable (direct) | [`remoteObservable.ts`](src/observable/remoteObservable.ts) | `remote_observable.hpp` |
-| Handle | [`remoteReference.ts`](src/observable/remoteReference.ts) | `remote_reference.hpp` |
-| Direct vs gateway ops | [`referenceOps.ts`](src/observable/referenceOps.ts), [`directReferenceOps.ts`](src/observable/directReferenceOps.ts) | `ReferenceOps` / `DirectReferenceOps` |
-| Observable → wire | [`streamPublisher.ts`](src/observable/streamPublisher.ts), [`streamRelayConsumer.ts`](src/observable/streamRelayConsumer.ts) | `stream_publisher.hpp`, `stream_relay_consumer.hpp` |
-| Cache po `(function_id, args)` | [`remoteRegistry.ts`](src/observable/remoteRegistry.ts) | `remote_registry.hpp` |
+## Build and test
 
-Backpressure: `onChange` zwraca `ObservablePromise` (resolved = sync, pending = czekaj); na kanale `tryQueueMessage` + `onWritable`. `SocketRpcClient` może być Starter + Channel w jednym (`new StreamMultiplexer(rpcClient, returnPid, returnSocket)`). Gdy RPC i `stream_*` są na **osobnych** socketach (observable-db: driver ≠ scan), przekaż kanał strumienia: `new StreamMultiplexer(rpcClient, streamChannel, returnPid, returnSocket)`.
-
-Adapter kernelowy (opcjonalny): [`../ts-kernel/src/KernelStreamEndpoint.ts`](../ts-kernel/src/KernelStreamEndpoint.ts) — para `(pid, socket)` jako `MessageChannel`. Rdzeń w `ts-rpc` działa bez kernela (`MockChannel` w testach).
-
-Generator **TS Client** używa `RemoteRegistry.getOrCreate` — zwraca `RemoteReference`. Live: `ref.observable()`, skan: `ref.stream(since)` (reuse live gdy `activeCount() > 0`) albo `ref.fetch(since)` (zawsze nowy skan).
-
----
-
-## Codegen → TS Client
-
-`rpc-codegen` (`codeGenCli.ts`) czyta `.wasm` / `.wdef` i emituje klienta TypeScript. Język: `-l "TS Client"`.
-
-C++ annotacje member-level w [`../cpp-rpc/src/serialization/annotations.hpp`](../cpp-rpc/src/serialization/annotations.hpp):
-
-- `[[=serialization::observable()]]` — live strumień (tail-and-catch). Generator dodaje overload bez `stream_handle` zwracający `RemoteReference` (ta sama nazwa, np. `table(...)`).
-- `[[=serialization::streamable()]]` — skończony strumień, nie obserwowalny. Generator dodaje `<method>_stream` zwracające `RemoteReference`.
-
-Oryginalna metoda RPC zostaje (pierwszy parametr `stream_handle` zostaje jawny). Extra pomija `stream_handle` i zwraca `RemoteReference`. `observable()` startuje `flags=observe`; `stream(since)` — reuse live gdy `activeCount() > 0`, inaczej `flags=none` z podanym `since`; `fetch(since)` zawsze nowy skan (`flags=none`). `stream_done` = koniec snapshota / catch-up (`loading → ready`), nie zamknięcie obserwacji.
-
-Server-side flavor is transparent to the client: a high-level method
-that returns `shared_ptr<Observable<BinaryEntry>>` (no `stream_handle`
-in C++) is still published as `stream_handle` first + void return.
-The generated `RemoteReference` overload is the same as for low-level
-methods that take `stream_handle` themselves.
-
-Wygenerowany konstruktor:
-
-```ts
-constructor(
-  rpcClient: SocketRpcClient,
-  returnPid: bigint | number,
-  returnSocket: number,
-  streamChannel?: MessageChannel,
-  remoteRegistry?: RemoteRegistry
-)
+```
+npm install
+npm run build
+npm test
 ```
 
-`streamChannel` opcjonalny: mux wtedy startuje RPC na `rpcClient`, a `stream_*` czyta z osobnego kanału. Bez niego Starter = Channel (jeden socket).
+## License
 
-Przykład — `table` w [`../observable-db/src/structures/observable_db.hpp`](../observable-db/src/structures/observable_db.hpp):
-
-```ts
-attachStreamMessages(scanClient)
-const client = new ObservableDbClient(driver, tsPid, 1, scanClient)
-const ref = client.table(tableId, lower, lowerMode, upper, upperMode, 0n, false, false)
-const watch = ref.observable()
-const scan = ref.stream()
-const alwaysScan = ref.fetch()
-watch.subscribe(consumer)
-```
-
-`rpc-codegen` na surowym `.wasm` **nie** woła `start()` / `register_all()`. Dla modułów, które rejestrują API dopiero w `start()` (observable-db), spawn w kernelu i `readRawRpcDescription`:
-
-```bash
-cmake --build cmake-build-emscripten --target observable-db
-npm run generate:client -w @wa-os/observable-db-tests
-```
-
-Ogólne CLI (moduły z pełnym registry już po `_initialize()`):
-
-```bash
-cd ts-rpc && npm run build
-node dist/src/codeGenCli.js path/to/module.wasm -l "TS Client" -s 0
-```
-
-Dostępne języki: `C++ Types`, `C++ Client`, `C++ Server`, `TS Type Registry`, `TS Server`, `TS Client`.
-
----
-
-## Testy
-
-```bash
-cd ts-rpc && npm test
-# z roota monorepo:
-npm test -w @wa-os/ts-rpc
-npm run gate   # pełny gate — [TESTING.md](../TESTING.md)
-```
-
-Pokrycie m.in.: golden compressed vs C++, flat skalarne, Person value/graph cross-lang (`serializationComplex.test.ts`), circular buffer, message channel (compressed + flat), RPC compressed + flat (`flatSocketRpc.test.ts`), kontrakt `IWriter`/`IReader`, flat LE smoke (`flatSerialization.test.ts`), observable (port `observable_ut.cpp` / `remote_observable_ut.cpp`), annotacje `observable`/`streamable` + generator TS Client.
+MIT. The only runtime dependency is `yargs`.

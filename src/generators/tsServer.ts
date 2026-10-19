@@ -105,7 +105,7 @@ export function generateTsServer(registry: TypeRegistry, options: TsServerGenera
   
   const lines: string[] = []
   lines.push('// Auto-generated TypeScript RPC Server')
-  lines.push("import { TypeRegistry, TypeDescription, TypeKind } from '@wa-os/ts-rpc'")
+  lines.push("import { TypeRegistry, TypeDescription, TypeKind } from '@daemonarium/rpc'")
   lines.push('')
   
   // Generate TypeScript type definitions

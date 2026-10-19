@@ -1,21 +1,23 @@
 {
-  "name": "@wa-os/ts-rpc",
+  "name": "@daemonarium/rpc",
   "version": "0.1.0",
-  "description": "rpc for communimaction with webassembly code",
-  "main": "src/index.ts",
-  "module": "src/index.ts",
+  "description": "TypeScript serialization and RPC over sockets, wire-compatible with daemonarium/rpc-cpp",
+  "main": "dist/src/index.js",
+  "module": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
-  "author": "Michał Łaszczewski",
+  "author": "Magowie Sp. z o.o.",
   "license": "MIT",
   "type": "module",
-  "scripts": {
-    "build": "tsc",
-    "start": "node dist/src/index.js",
-    "test": "tsx node_modules/.bin/mocha --timeout 10000 'tests/**/*.test.ts'",
-    "test:watch": "tsx node_modules/.bin/mocha --watch --timeout 10000 'tests/**/*.test.ts'"
-  },
+  "files": ["dist", "README.md", "LICENSE"],
   "bin": {
     "rpc-codegen": "./dist/src/codeGenCli.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "tsx node_modules/.bin/mocha --timeout 10000 'tests/**/*.test.ts'"
   },
   "dependencies": {
     "yargs": "^17.7.2"
@@ -23,10 +25,10 @@
   "devDependencies": {
     "@types/mocha": "^10.0.0",
     "@types/node": "^22.18.11",
+    "@types/yargs": "^17.0.32",
     "chai": "^4.3.10",
     "mocha": "^10.2.0",
     "tsx": "^4.7.0",
-    "typescript": "~5.9.0",
-    "@types/yargs": "^17.0.32"
+    "typescript": "~5.9.0"
   }
 }
